@@ -93,6 +93,10 @@ python do_dependencytrack_upload () {
     import requests
     from pathlib import Path
 
+    dt_upload = bb.utils.to_boolean(d.getVar('DEPENDENCYTRACK_UPLOAD'))
+    if not dt_upload:
+        return
+
     sbom_path = d.getVar("DEPENDENCYTRACK_SBOM")
     dt_project = d.getVar("DEPENDENCYTRACK_PROJECT")
     dt_url = f"{d.getVar('DEPENDENCYTRACK_API_URL')}/v1/bom"
