@@ -17,6 +17,12 @@ DEPENDENCYTRACK_UPLOAD ??= "False"
 DEPENDENCYTRACK_PROJECT ??= ""
 DEPENDENCYTRACK_API_URL ??= "http://localhost:8081/api"
 DEPENDENCYTRACK_API_KEY ??= ""
+DEPENDENCYTRACK_PROJECT_NAME ??= ""
+DEPENDENCYTRACK_PROJECT_VERSION ??= ""
+DEPENDENCYTRACK_PARENT ??= ""
+DEPENDENCYTRACK_PARENT_NAME ??= ""
+DEPENDENCYTRACK_PARENT_VERSION ??= ""
+DEPENDENCYTRACK_AUTO_CREATE ??= "false"
 
 DT_LICENSE_CONVERSION_MAP ??= '{ "GPLv2+" : "GPL-2.0-or-later", "GPLv2" : "GPL-2.0", "LGPLv2" : "LGPL-2.0", "LGPLv2+" : "LGPL-2.0-or-later", "LGPLv2.1+" : "LGPL-2.1-or-later", "LGPLv2.1" : "LGPL-2.1"}'
 
@@ -28,7 +34,6 @@ python do_dependencytrack_init() {
     if not os.path.exists(sbom_dir):
         bb.debug(2, "Creating cyclonedx directory: %s" % sbom_dir)
         bb.utils.mkdirhier(sbom_dir)
-
         bb.debug(2, "Creating empty sbom")
         write_sbom(d, {
             "bomFormat": "CycloneDX",
@@ -84,7 +89,7 @@ do_rootfs[recrdeptask] += "do_dependencytrack_collect"
 python do_dependencytrack_upload () {
     import json
     import base64
-    import urllib
+    import requests
     from pathlib import Path
 
     dt_upload = bb.utils.to_boolean(d.getVar('DEPENDENCYTRACK_UPLOAD'))
@@ -94,32 +99,52 @@ python do_dependencytrack_upload () {
     sbom_path = d.getVar("DEPENDENCYTRACK_SBOM")
     dt_project = d.getVar("DEPENDENCYTRACK_PROJECT")
     dt_url = f"{d.getVar('DEPENDENCYTRACK_API_URL')}/v1/bom"
+    dt_project_name = d.getVar("DEPENDENCYTRACK_PROJECT_NAME")
+    dt_project_version = d.getVar("DEPENDENCYTRACK_PROJECT_VERSION")
+    dt_parent = d.getVar("DEPENDENCYTRACK_PARENT")
+    dt_parent_name = d.getVar("DEPENDENCYTRACK_PARENT_NAME")
+    dt_parent_version = d.getVar("DEPENDENCYTRACK_PARENT_VERSION")
+    dt_auto_create = d.getVar("DEPENDENCYTRACK_AUTO_CREATE")
 
     bb.debug(2, f"Loading final SBOM: {sbom_path}")
-    sbom = Path(sbom_path).read_text()
-
-    payload = json.dumps({
-        "project": dt_project,
-        "bom": base64.b64encode(sbom.encode()).decode('ascii')
-    }).encode()
     bb.debug(2, f"Uploading SBOM to project {dt_project} at {dt_url}")
 
     headers = {
-        "Content-Type": "application/json",
         "X-API-Key": d.getVar("DEPENDENCYTRACK_API_KEY")
     }
-    req = urllib.request.Request(
-        dt_url,
-        data=payload,
-        headers=headers,
-        method="PUT")
+
+    files = {
+        'autoCreate': (None, dt_auto_create),
+        'bom': open(sbom_path, 'rb')
+    }
+
+    if dt_project == "":
+        if dt_project_name != "":
+            if dt_project_version == "":
+               bb.error("DEPENDENCYTRACK_PROJECT_VERSION is mandatory if DEPENDENCYTRACK_PROJECT_NAME is set")
+            else:
+               files['projectName'] = (None, dt_project_name)
+               files['projectVersion'] = (None, dt_project_version)
+    else:
+        files['project'] = dt_project
+
+    if dt_parent == "":
+        if dt_parent_name != "":
+            if dt_parent_version == "":
+               bb.error("DEPENDENCYTRACK_PARENT_VERSION is mandatory if DEPENDENCYTRACK_PARENT_NAME is set")
+            else:
+               files['parentName'] = (None, dt_parent_name)
+               files['parentVersion'] = (None, dt_parent_version)
+    else:
+        files['parent'] = dt_parent
 
     try:
-        urllib.request.urlopen(req)
-    except urllib.error.HTTPError as e:
-        bb.error(f"Failed to upload SBOM to Dependency Track server at {dt_url}. [HTTP Error] {e.code}; Reason: {e.reason}")
-    except urllib.error.URLError as e:
-        bb.error(f"Failed to upload SBOM to Dependency Track server at {dt_url}. [URL Error] Reason: {e.reason}")
+        response = requests.post(dt_url, headers=headers, files=files)
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        bb.error(f"Failed to upload SBOM to Dependency Track server at {dt_url}. [HTTP Error] {e}")
+    except requests.exceptions.RequestException as e:
+        bb.error(f"Failed to upload SBOM to Dependency Track server at {dt_url}. [Error] {e}")
     else:
         bb.debug(2, f"SBOM successfully uploaded to {dt_url}")
 }
