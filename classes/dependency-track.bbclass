@@ -34,7 +34,6 @@ python do_dependencytrack_init() {
     if not os.path.exists(sbom_dir):
         bb.debug(2, "Creating cyclonedx directory: %s" % sbom_dir)
         bb.utils.mkdirhier(sbom_dir)
-
         bb.debug(2, "Creating empty sbom")
         write_sbom(d, {
             "bomFormat": "CycloneDX",
@@ -111,20 +110,19 @@ python do_dependencytrack_upload () {
     bb.debug(2, f"Uploading SBOM to project {dt_project} at {dt_url}")
 
     headers = {
-        "Content-Type": "application/json",
         "X-API-Key": d.getVar("DEPENDENCYTRACK_API_KEY")
     }
 
     files = {
         'autoCreate': (None, dt_auto_create),
-        'bom': open(sbom_path, 'rb'),
+        'bom': open(sbom_path, 'rb')
     }
 
     if dt_project == "":
         if dt_project_name != "":
             if dt_project_version == "":
-                bb.error(f"DEPENDENCYTRACK_PROJECT_VERSION is mandatory if DEPENDENCYTRACK_PROJECT_NAME is set"
-           else:
+               bb.error("DEPENDENCYTRACK_PROJECT_VERSION is mandatory if DEPENDENCYTRACK_PROJECT_NAME is set")
+            else:
                files['projectName'] = (None, dt_project_name)
                files['projectVersion'] = (None, dt_project_version)
     else:
@@ -133,8 +131,8 @@ python do_dependencytrack_upload () {
     if dt_parent == "":
         if dt_parent_name != "":
             if dt_parent_version == "":
-                bb.error(f"DEPENDENCYTRACK_PARENT_VERSION is mandatory if DEPENDENCYTRACK_PARENT_NAME is set"
-           else:
+               bb.error("DEPENDENCYTRACK_PARENT_VERSION is mandatory if DEPENDENCYTRACK_PARENT_NAME is set")
+            else:
                files['parentName'] = (None, dt_parent_name)
                files['parentVersion'] = (None, dt_parent_version)
     else:
