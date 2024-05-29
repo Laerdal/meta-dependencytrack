@@ -28,7 +28,7 @@ DT_LICENSE_CONVERSION_MAP ??= '{ "GPLv2+" : "GPL-2.0-or-later", "GPLv2" : "GPL-2
 
 python do_dependencytrack_init() {
     import uuid
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     sbom_dir = d.getVar("DEPENDENCYTRACK_DIR")
     if not os.path.exists(sbom_dir):
@@ -37,11 +37,11 @@ python do_dependencytrack_init() {
         bb.debug(2, "Creating empty sbom")
         write_sbom(d, {
             "bomFormat": "CycloneDX",
-            "specVersion": "1.4",
+            "specVersion": "1.5",
             "serialNumber": "urn:uuid:" + str(uuid.uuid4()),
             "version": 1,
             "metadata": {
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
             "components": []
         })
