@@ -6,9 +6,9 @@
 CVE_PRODUCT ??= "${BPN}"
 CVE_VERSION ??= "${PV}"
 
-DEPENDENCYTRACK_DIR ??= "${DEPLOY_DIR}/dependency-track"
+DEPENDENCYTRACK_DIR ??= "${DEPLOY_DIR}/dependency-track/${MACHINE}"
 DEPENDENCYTRACK_SBOM ??= "${DEPENDENCYTRACK_DIR}/bom.json"
-DEPENDENCYTRACK_TMP ??= "${TMPDIR}/dependency-track"
+DEPENDENCYTRACK_TMP ??= "${TMPDIR}/dependency-track/${MACHINE}"
 DEPENDENCYTRACK_LOCK ??= "${DEPENDENCYTRACK_TMP}/bom.lock"
 
 # Set DEPENDENCYTRACK_UPLOAD to False if you want to control the upload in other
@@ -52,7 +52,7 @@ python do_dependencytrack_collect() {
     version = d.getVar("CVE_VERSION")
     sbom = read_sbom(d)
 
-    # update it with the new package info
+        # update it with the new package info
 
     for index, o in enumerate(get_cpe_ids(name, version)):
         bb.debug(2, f"Collecting package {name}@{version} ({o.cpe})")
@@ -85,17 +85,24 @@ python do_dependencytrack_upload () {
     import base64
     import urllib
     from pathlib import Path
+    from oe.rootfs import image_list_installed_packages
+
+    sbom = read_sbom(d)
+
+    pkgs_names = [pkg for pkg in image_list_installed_packages(d)]
+
+    bb.debug(2, f"Removing packages from SBOM: {pkgs_names}")
+
+    sbom["components"] = [component for component in sbom["components"] if component["name"] not in pkgs_names]
+    write_sbom(d, sbom)
 
     dt_upload = bb.utils.to_boolean(d.getVar('DEPENDENCYTRACK_UPLOAD'))
     if not dt_upload:
         return
 
-    sbom_path = d.getVar("DEPENDENCYTRACK_SBOM")
+    
     dt_project = d.getVar("DEPENDENCYTRACK_PROJECT")
     dt_url = f"{d.getVar('DEPENDENCYTRACK_API_URL')}/v1/bom"
-
-    bb.debug(2, f"Loading final SBOM: {sbom_path}")
-    sbom = Path(sbom_path).read_text()
 
     payload = json.dumps({
         "project": dt_project,
@@ -122,8 +129,11 @@ python do_dependencytrack_upload () {
     else:
         bb.debug(2, f"SBOM successfully uploaded to {dt_url}")
 }
-addhandler do_dependencytrack_upload
-do_dependencytrack_upload[eventmask] = "bb.event.BuildCompleted"
+
+ROOTFS_POSTUNINSTALL_COMMAND += "do_dependencytrack_upload;"
+
+#addhandler do_dependencytrack_upload
+#do_dependencytrack_upload[eventmask] = "bb.event.BuildCompleted"
 
 def read_sbom(d):
     import json
