@@ -89,11 +89,11 @@ python do_dependencytrack_upload () {
 
     sbom = read_sbom(d)
 
-    pkgs_names = [pkg for pkg in image_list_installed_packages(d)]
+    pkgs_names = read_json(d, d.getVar("DEPENDENCYTRACK_TMP") + "/installed_packages.json")
 
     bb.debug(2, f"Removing packages from SBOM: {pkgs_names}")
 
-    sbom["components"] = [component for component in sbom["components"] if component["name"] not in pkgs_names]
+    sbom["components"] = [component for component in sbom["components"] if component["name"] in pkgs_names]
     write_sbom(d, sbom)
 
     dt_upload = bb.utils.to_boolean(d.getVar('DEPENDENCYTRACK_UPLOAD'))
@@ -130,21 +130,39 @@ python do_dependencytrack_upload () {
         bb.debug(2, f"SBOM successfully uploaded to {dt_url}")
 }
 
-ROOTFS_POSTUNINSTALL_COMMAND += "do_dependencytrack_upload;"
+python do_dependencytrack_installed () {
+    import json
+    import base64
+    import urllib
+    from pathlib import Path
+    from oe.rootfs import image_list_installed_packages
 
-#addhandler do_dependencytrack_upload
-#do_dependencytrack_upload[eventmask] = "bb.event.BuildCompleted"
+    pkgs_names = [pkg for pkg in image_list_installed_packages(d)]
+
+    write_json(d, pkgs_names, d.getVar("DEPENDENCYTRACK_TMP") + "/installed_packages.json")
+}
+
+ROOTFS_POSTUNINSTALL_COMMAND += "do_dependencytrack_installed;"
+
+addhandler do_dependencytrack_upload
+do_dependencytrack_upload[eventmask] = "bb.event.BuildCompleted"
 
 def read_sbom(d):
+    return read_json(d, d.getVar("DEPENDENCYTRACK_SBOM"))
+
+def read_json(d, path):
     import json
     from pathlib import Path
-    return json.loads(Path(d.getVar("DEPENDENCYTRACK_SBOM")).read_text())
+    return json.loads(Path(path).read_text())
 
 def write_sbom(d, sbom):
+    write_json(d, sbom, d.getVar("DEPENDENCYTRACK_SBOM"))
+
+def write_json(d, data, path):
     import json
     from pathlib import Path
-    Path(d.getVar("DEPENDENCYTRACK_SBOM")).write_text(
-        json.dumps(sbom, indent=2)
+    Path(path).write_text(
+        json.dumps(data, indent=2)
     )
 
 def get_licenses(d) :
