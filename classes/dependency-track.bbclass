@@ -22,7 +22,8 @@ DT_LICENSE_CONVERSION_MAP ??= '{ "GPLv2+" : "GPL-2.0-or-later", "GPLv2" : "GPL-2
 
 python do_dependencytrack_init() {
     import uuid
-    from datetime import datetime
+    from datetime import datetime, timezone
+    import hashlib
 
     sbom_dir = d.getVar("DEPENDENCYTRACK_DIR")
     bb.debug(2, "Creating cyclonedx directory: %s" % sbom_dir)
@@ -35,9 +36,24 @@ python do_dependencytrack_init() {
         "serialNumber": "urn:uuid:" + str(uuid.uuid4()),
         "version": 1,
         "metadata": {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "tools": [
+                {
+                    "vendor": "Kontron AIS GmbH",
+                    "name": "dependency-track",
+                    "version": "1.0"
+                }
+            ],
+            "component": {
+                "type": "operating-system",
+                "bom-ref": hashlib.md5(d.getVar("MACHINE", False).encode()).hexdigest(),
+                "group": d.getVar("MACHINE", False),
+                "name": d.getVar("DISTRO_NAME", False),
+                "version": d.getVar("SECUREOS_RELEASE_VERSION", False)
+            }
         },
-        "components": []
+        "components": [],
+        "dependencies": [],
     })
 }
 addhandler do_dependencytrack_init
@@ -46,7 +62,7 @@ do_dependencytrack_init[eventmask] = "bb.event.BuildStarted"
 python do_dependencytrack_collect() {
     import json
     from pathlib import Path
-
+    import hashlib
     # load the bom
     name = d.getVar("CVE_PRODUCT")
     version = d.getVar("CVE_VERSION")
@@ -54,12 +70,14 @@ python do_dependencytrack_collect() {
 
         # update it with the new package info
 
+
     for index, o in enumerate(get_cpe_ids(name, version)):
         bb.debug(2, f"Collecting package {name}@{version} ({o.cpe})")
         if not next((c for c in sbom["components"] if c["cpe"] == o.cpe), None):
             
             component_json = {
                 "type": "application",
+                "bom-ref": hashlib.md5(o.cpe.encode()).hexdigest(),
                 "name": o.product,
                 "group": o.vendor,
                 "version": version,
@@ -83,17 +101,49 @@ do_rootfs[recrdeptask] += "do_dependencytrack_collect"
 python do_dependencytrack_upload () {
     import json
     import base64
+    import hashlib
     import urllib
     from pathlib import Path
     from oe.rootfs import image_list_installed_packages
 
     sbom = read_sbom(d)
 
-    pkgs_names = read_json(d, d.getVar("DEPENDENCYTRACK_TMP") + "/installed_packages.json")
+    installed_pkgs = read_json(d, d.getVar("DEPENDENCYTRACK_TMP") + "/installed_packages.json")
+    pkgs_names = list(installed_pkgs.keys())
 
     bb.debug(2, f"Removing packages from SBOM: {pkgs_names}")
 
     sbom["components"] = [component for component in sbom["components"] if component["name"] in pkgs_names]
+
+    components_dict = {component["name"]: component for component in sbom["components"]}
+
+    for sbom_component in sbom["components"]:
+        pkg = installed_pkgs.get(sbom_component["name"])
+        
+        if pkg:
+            for dep in pkg.get("deps", []):
+                dep_component = components_dict.get(dep)
+                if dep_component:
+                    depend = next((d for d in sbom["dependencies"] if d["ref"] == sbom_component["bom-ref"]), None)
+                    if depend is None:
+                        depend = {"ref": sbom_component["bom-ref"], "dependsOn": []}
+                        depend["dependsOn"].append(dep_component["bom-ref"])
+                        sbom["dependencies"].append(depend)
+                    else:  
+                        depend["dependsOn"].append(dep_component["bom-ref"])
+
+    # Extract all ref values
+    all_refs = {component["bom-ref"] for component in sbom["components"]}
+
+    # Extract all dependsOn values
+    all_depends_on = {ref for dependency in sbom["dependencies"] for ref in dependency.get("dependsOn", [])}
+
+    # Find refs that are not in dependsOn
+    refs_not_in_depends_on = all_refs - all_depends_on
+
+    # add dependencies for components that are not in dependsOn
+    sbom["dependencies"].append({ "ref": hashlib.md5(d.getVar("MACHINE", False).encode()).hexdigest(), "dependsOn": list(refs_not_in_depends_on) })
+                
     write_sbom(d, sbom)
 
     dt_upload = bb.utils.to_boolean(d.getVar('DEPENDENCYTRACK_UPLOAD'))
@@ -131,15 +181,12 @@ python do_dependencytrack_upload () {
 }
 
 python do_dependencytrack_installed () {
-    import json
-    import base64
-    import urllib
     from pathlib import Path
     from oe.rootfs import image_list_installed_packages
 
-    pkgs_names = [pkg for pkg in image_list_installed_packages(d)]
+    pkgs = image_list_installed_packages(d)
 
-    write_json(d, pkgs_names, d.getVar("DEPENDENCYTRACK_TMP") + "/installed_packages.json")
+    write_json(d, pkgs, d.getVar("DEPENDENCYTRACK_TMP") + "/installed_packages.json")
 }
 
 ROOTFS_POSTUNINSTALL_COMMAND += "do_dependencytrack_installed;"
