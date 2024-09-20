@@ -48,7 +48,7 @@ python do_dependencytrack_init() {
                 "type": "operating-system",
                 "bom-ref": hashlib.md5(d.getVar("MACHINE", False).encode()).hexdigest(),
                 "group": d.getVar("MACHINE", False),
-                "name": d.getVar("DISTRO_NAME", False),
+                "name": d.getVar("DISTRO_NAME", False) + "-" + d.getVar('MACHINE').replace("kontron-", ""),
                 "version": d.getVar("SECUREOS_RELEASE_VERSION", False)
             }
         },
