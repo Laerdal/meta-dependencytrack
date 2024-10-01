@@ -49,15 +49,74 @@ python do_dependencytrack_init() {
 addhandler do_dependencytrack_init
 do_dependencytrack_init[eventmask] = "bb.event.BuildStarted"
 
+def collect_package_providers(d):
+    from pathlib import Path
+    import json
+
+    providers = {}
+
+    taskdepdata = d.getVar("BB_TASKDEPDATA", False)
+    deps = sorted(set(
+        dep[0] for dep in taskdepdata.values() if dep[0] != d.getVar("PN")
+    ))
+    deps.append(d.getVar("PN"))
+
+    for dep_pn in deps:
+        recipe_data = oe.packagedata.read_pkgdata(dep_pn, d)
+
+        for pkg in recipe_data.get("PACKAGES", "").split():
+
+            pkg_data = oe.packagedata.read_subpkgdata_dict(pkg, d)
+            rprovides = set(n for n, _ in bb.utils.explode_dep_versions2(pkg_data.get("RPROVIDES", "")).items())
+            rprovides.add(pkg)
+
+            for r in rprovides:
+                providers[r] = pkg
+
+    return providers
+collect_package_providers[vardepsexclude] += "BB_TASKDEPDATA"
+
 python do_dependencytrack_collect() {
     import json
+    import oe.packagedata
     from pathlib import Path
 
     # load the bom
     name = d.getVar("CVE_PRODUCT")
     version = d.getVar("CVE_VERSION")
     sbom = read_sbom(d)
+    providers = collect_package_providers(d)
 
+    for package in d.getVar("PACKAGES").split():
+        localdata = bb.data.createCopy(d)
+        pkg_name = d.getVar("PKG:%s" % package) or package
+        localdata.setVar("PKG", pkg_name)
+        localdata.setVar('OVERRIDES', d.getVar("OVERRIDES", False) + ":" + package)
+
+        if not oe.packagedata.packaged(package, localdata):
+            continue
+
+        deps = bb.utils.explode_dep_versions2(localdata.getVar("RDEPENDS") or "")
+        bb.debug(2, "rdepends: %s" % bb.utils.join_deps(deps))
+
+        seen_deps = set()
+        for dep, _ in deps.items():
+            if dep in seen_deps:
+                continue
+
+            if dep not in providers:
+                continue
+
+            dep = providers[dep]
+
+            if not oe.packagedata.packaged(dep, localdata):
+                continue
+
+            dep_pkg_data = oe.packagedata.read_subpkgdata_dict(dep, d)
+            dep_pkg = dep_pkg_data["PKG"]
+            bb.debug(2, "dep_pkg_data: %s" % dep_pkg_data)
+            bb.debug(2, "dep_pkg: %s" % dep_pkg)
+    
     # update it with the new package info
 
     for index, o in enumerate(get_cpe_ids(name, version)):
