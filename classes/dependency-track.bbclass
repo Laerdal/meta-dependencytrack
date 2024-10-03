@@ -77,8 +77,7 @@ python do_dependencytrack_collect() {
     version = d.getVar("CVE_VERSION")
     sbom = read_sbom(d)
 
-        # update it with the new package info
-
+    # update it with the new package info
 
     for index, o in enumerate(get_cpe_ids(name, version)):
         bb.debug(2, f"Collecting package {name}@{version} ({o.cpe})")
@@ -126,8 +125,13 @@ python do_dependencytrack_upload () {
 
     components_dict = {component["name"]: component for component in sbom["components"]}
 
+    operating_system_hash = hashlib.md5(d.getVar("MACHINE", False).encode()).hexdigest()
     for sbom_component in sbom["components"]:
         pkg = installed_pkgs.get(sbom_component["name"])
+
+        # ignore operating_system here as it is handled at the end
+        if sbom_component["bom-ref"] == operating_system_hash:
+            continue
 
         if pkg:
             for dep in pkg.get("deps", []):
@@ -138,7 +142,7 @@ python do_dependencytrack_upload () {
                         depend = {"ref": sbom_component["bom-ref"], "dependsOn": []}
                         depend["dependsOn"].append(dep_component["bom-ref"])
                         sbom["dependencies"].append(depend)
-                    else:
+                    elif dep_component["bom-ref"] not in depend["dependsOn"]:
                         depend["dependsOn"].append(dep_component["bom-ref"])
 
     # Extract all ref values
@@ -158,7 +162,6 @@ python do_dependencytrack_upload () {
     dt_upload = bb.utils.to_boolean(d.getVar('DEPENDENCYTRACK_UPLOAD'))
     if not dt_upload:
         return
-
 
     dt_project = d.getVar("DEPENDENCYTRACK_PROJECT")
     dt_url = f"{d.getVar('DEPENDENCYTRACK_API_URL')}/v1/bom"
