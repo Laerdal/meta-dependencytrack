@@ -87,6 +87,12 @@ python do_dependencytrack_collect() {
             license_json = get_licenses(d)
             if license_json:
                 component_json["licenses"] = license_json
+
+            references = get_references(d)
+
+            if references:
+                component_json["externalReferences"] = references
+
             sbom["components"].append(component_json)
 
     # write it back to the deploy directory
@@ -211,6 +217,23 @@ def write_json(d, data, path):
     Path(path).write_text(
         json.dumps(data, indent=2)
     )
+
+def get_references(d):
+    import re
+    pattern = re.compile(r"http[s]*:\/\/[a-z.]*\/[a-z.\-\/]*[a-z.\-].(tar.([gxl]?z|bz2)|tgz)")
+    src_uris = d.getVar("SRC_URI").split(" ")
+    refs = []
+    for src in src_uris:
+        if src.startswith("git://") or src.endswith(".git"):
+            refs.append({"type": "vcs", "url": src})
+
+        elif pattern.match(src):
+            refs.append({"type": "source-distribution", "url": src})
+
+        elif src.startswith("http://") or src.startswith("https://"):
+            refs.append({"type": "website", "url": src})
+
+    return refs
 
 def get_licenses(d) :
     from pathlib import Path
