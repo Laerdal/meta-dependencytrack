@@ -58,7 +58,7 @@ python do_dependencytrack_init() {
                 "bom-ref": hashlib.md5(d.getVar("MACHINE", False).encode()).hexdigest(),
                 "group": d.getVar("MACHINE", False),
                 "name": d.getVar("DISTRO_NAME", False) + "-" + d.getVar('MACHINE').replace("kontron-", ""),
-                "version": d.getVar("SECUREOS_RELEASE_VERSION", False)
+                "version": d.getVar("SECUREOS_RELEASE_VERSION", True)
             }
         },
         "components": [],
@@ -79,17 +79,16 @@ python do_dependencytrack_collect() {
 
     # update it with the new package info
 
-    for index, o in enumerate(get_cpe_ids(name, version)):
-        bb.debug(2, f"Collecting package {name}@{version} ({o.cpe})")
-        if not next((c for c in sbom["components"] if c["cpe"] == o.cpe), None):
-            
+    def add_component(cpe_info, name, version):
+        bb.debug(2, f"Collecting package {name}@{version} ({cpe_info.cpe})")
+        if not next((c for c in sbom["components"] if c["cpe"] == cpe_info.cpe), None):
             component_json = {
                 "type": "application",
-                "bom-ref": hashlib.md5(o.cpe.encode()).hexdigest(),
-                "name": o.product,
-                "group": o.vendor,
+                "bom-ref": hashlib.md5(cpe_info.cpe.encode()).hexdigest(),
+                "name": cpe_info.product,
+                "group": cpe_info.vendor,
                 "version": version,
-                "cpe": o.cpe,
+                "cpe": cpe_info.cpe,
             }
             
             license_json = get_licenses(d)
@@ -97,8 +96,26 @@ python do_dependencytrack_collect() {
                 component_json["licenses"] = license_json
             sbom["components"].append(component_json)
 
+    dependencies_path = d.getVar("DEPENDENCYTRACK_TMP") + "/dependencies.json"
+    temp_dependencies_json = read_json(d, dependencies_path) if os.path.exists(dependencies_path) else dict()
+
+    # name is set to default, so CVE_PRODUCT not set
+    if name == d.getVar("BPN"):
+        # there might be several packages in 1 recipe and all of them are needed
+        for package in d.getVar("PACKAGES").split():
+            # only 1 CPE product
+            add_component(get_cpe_ids(package, version)[0], package, version)
+
+            dependencies = d.getVar(f'RDEPENDS:{package}', True)
+            if dependencies:
+                temp_dependencies_json[package] = dependencies.split()
+    else:
+        for index, o in enumerate(get_cpe_ids(name, version)):
+            add_component(o, name, version)
+
     # write it back to the deploy directory
     write_sbom(d, sbom)
+    write_json(d, temp_dependencies_json, dependencies_path)
 }
 
 addtask dependencytrack_collect before do_build after do_fetch
@@ -119,19 +136,17 @@ python do_dependencytrack_upload () {
     installed_pkgs = read_json(d, d.getVar("DEPENDENCYTRACK_TMP") + "/installed_packages.json")
     pkgs_names = list(installed_pkgs.keys())
 
-    bb.debug(2, f"Removing packages from SBOM: {pkgs_names}")
-
-    sbom["components"] = [component for component in sbom["components"] if component["name"] in pkgs_names]
+    temp_dependencies_json = read_json(d, d.getVar("DEPENDENCYTRACK_TMP") + "/dependencies.json")
+    for package, dependencies in temp_dependencies_json.items():
+        if not installed_pkgs.get(package, None):
+            installed_pkgs[package] = {"deps": dependencies}
+        else:
+            installed_pkgs[package]["deps"].extend(dependencies)
 
     components_dict = {component["name"]: component for component in sbom["components"]}
 
-    operating_system_hash = hashlib.md5(d.getVar("MACHINE", False).encode()).hexdigest()
     for sbom_component in sbom["components"]:
         pkg = installed_pkgs.get(sbom_component["name"])
-
-        # ignore operating_system here as it is handled at the end
-        if sbom_component["bom-ref"] == operating_system_hash:
-            continue
 
         if pkg:
             for dep in pkg.get("deps", []):
