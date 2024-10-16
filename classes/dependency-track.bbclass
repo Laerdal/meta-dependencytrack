@@ -79,12 +79,20 @@ python do_dependencytrack_collect() {
 
     # update it with the new package info
 
-    def add_component(cpe_info, name, version):
+    filter_suffixes = ("-native", "-dbg", "-staticdev", "-doc", "-src", "-locale")
+
+    cve_mapping_path = d.getVar("DEPENDENCYTRACK_TMP") + "/cve_mapping.json"
+    cve_mapping = read_json(d, cve_mapping_path) if os.path.exists(cve_mapping_path) else dict()
+
+    def map_component_cve_name_list(recipe_name):
+        return cve_mapping.get(recipe_name, [recipe_name])
+
+    def add_component(cpe_info, temp_dependencies_json, name, version):
         bb.debug(2, f"Collecting package {name}@{version} ({cpe_info.cpe})")
         if not next((c for c in sbom["components"] if c["cpe"] == cpe_info.cpe), None):
             component_json = {
                 "type": "application",
-                "bom-ref": hashlib.md5(cpe_info.cpe.encode()).hexdigest(),
+                "bom-ref": cpe_info.product + " - " + hashlib.md5(cpe_info.cpe.encode()).hexdigest(),
                 "name": cpe_info.product,
                 "group": cpe_info.vendor,
                 "version": version,
@@ -96,26 +104,45 @@ python do_dependencytrack_collect() {
                 component_json["licenses"] = license_json
             sbom["components"].append(component_json)
 
+        dependencies = d.getVar(f'RDEPENDS:{name}', True) or ""
+        if dependencies.strip():
+            result_list = []
+            for dep in dependencies.split():
+                for suffix in filter_suffixes:
+                    if dep.endswith(suffix):
+                        result_list.extend(map_component_cve_name_list(dep[:-len(suffix)]))
+                        break
+                else:
+                    result_list.extend(map_component_cve_name_list(dep))
+
+            temp_dependencies_json[name] = temp_dependencies_json.get(name, []) + result_list
+
+        # CVE_PRODUCT was overwritten, so mapping needs to be saved
+        if d.getVar("CVE_PRODUCT") != d.getVar("BPN"):
+            cve_names = [vendor_name.split(":")[-1] for vendor_name in name.split()]
+            cve_mapping[d.getVar("BPN")] = list(set(cve_mapping.get(d.getVar("BPN"), []) + cve_names))
+
     dependencies_path = d.getVar("DEPENDENCYTRACK_TMP") + "/dependencies.json"
     temp_dependencies_json = read_json(d, dependencies_path) if os.path.exists(dependencies_path) else dict()
 
     # name is set to default, so CVE_PRODUCT not set
     if name == d.getVar("BPN"):
-        # there might be several packages in 1 recipe and all of them are needed
-        for package in d.getVar("PACKAGES").split():
+        # there might be several packages in 1 recipe and some of them are needed to be filted out
+        for package in filter(
+            lambda s: all(
+                not s.endswith(suffix) for suffix in filter_suffixes
+            ), 
+            d.getVar("PACKAGES").split()):
             # only 1 CPE product
-            add_component(get_cpe_ids(package, version)[0], package, version)
-
-            dependencies = d.getVar(f'RDEPENDS:{package}', True)
-            if dependencies:
-                temp_dependencies_json[package] = dependencies.split()
+            add_component(get_cpe_ids(package, version)[0], temp_dependencies_json, package, version)
     else:
         for index, o in enumerate(get_cpe_ids(name, version)):
-            add_component(o, name, version)
+            add_component(o, temp_dependencies_json, name, version)
 
     # write it back to the deploy directory
     write_sbom(d, sbom)
     write_json(d, temp_dependencies_json, dependencies_path)
+    write_json(d, cve_mapping, cve_mapping_path)
 }
 
 addtask dependencytrack_collect before do_build after do_fetch
@@ -151,7 +178,7 @@ python do_dependencytrack_upload () {
         if pkg:
             for dep in pkg.get("deps", []):
                 dep_component = components_dict.get(dep)
-                if dep_component:
+                if dep_component and dep_component["bom-ref"] != sbom_component["bom-ref"]:
                     depend = next((d for d in sbom["dependencies"] if d["ref"] == sbom_component["bom-ref"]), None)
                     if depend is None:
                         depend = {"ref": sbom_component["bom-ref"], "dependsOn": []}
