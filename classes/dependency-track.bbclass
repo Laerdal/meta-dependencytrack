@@ -31,7 +31,7 @@ python do_dependencytrack_init() {
     from datetime import datetime, timezone
     import hashlib
 
-    sbom_file = d.getVar("DEPENDENCYTRACK_DIR")
+    sbom_file = d.getVar("DEPENDENCYTRACK_SBOM")
 
     if os.path.exists(sbom_file):
         return
