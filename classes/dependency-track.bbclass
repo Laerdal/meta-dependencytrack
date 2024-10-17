@@ -228,7 +228,7 @@ python do_dependencytrack_upload () {
 
     files = {
         'autoCreate': (None, dt_auto_create),
-        'bom': open(sbom_path, 'rb')
+        'bom': open(d.getVar("DEPENDENCYTRACK_SBOM"), 'rb')
     }
 
     if dt_project == "":
