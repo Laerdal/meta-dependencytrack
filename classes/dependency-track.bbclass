@@ -31,12 +31,15 @@ python do_dependencytrack_init() {
     from datetime import datetime, timezone
     import hashlib
 
-    sbom_dir = d.getVar("DEPENDENCYTRACK_DIR")
-    if os.path.exists(sbom_dir):
+    sbom_file = d.getVar("DEPENDENCYTRACK_DIR")
+
+    if os.path.exists(sbom_file):
         return
 
-    bb.debug(2, "Creating cyclonedx directory: %s" % sbom_dir)
-    bb.utils.mkdirhier(sbom_dir)
+    sbom_dir = d.getVar("DEPENDENCYTRACK_DIR")
+    if not os.path.exists(sbom_dir):
+        bb.debug(2, "Creating cyclonedx directory: %s" % sbom_dir)
+        bb.utils.mkdirhier(sbom_dir)
 
     bb.debug(2, "Creating empty sbom")
     write_sbom(d, {
