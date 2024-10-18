@@ -226,7 +226,7 @@ python do_dependencytrack_upload () {
     }
 
     files = {
-        'parent': dt_parent,
+        'parentUUID': dt_parent,
         'autoCreate': (None, dt_auto_create),
         'bom': open(d.getVar("DEPENDENCYTRACK_SBOM"), 'rb')
     }
