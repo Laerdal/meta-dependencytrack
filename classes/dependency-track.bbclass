@@ -20,8 +20,6 @@ DEPENDENCYTRACK_API_KEY ??= ""
 DEPENDENCYTRACK_PROJECT_NAME ??= ""
 DEPENDENCYTRACK_PROJECT_VERSION ??= ""
 DEPENDENCYTRACK_PARENT ??= ""
-DEPENDENCYTRACK_PARENT_NAME ??= ""
-DEPENDENCYTRACK_PARENT_VERSION ??= ""
 DEPENDENCYTRACK_AUTO_CREATE ??= "false"
 
 DT_LICENSE_CONVERSION_MAP ??= '{ "GPLv2+" : "GPL-2.0-or-later", "GPLv2" : "GPL-2.0", "LGPLv2" : "LGPL-2.0", "LGPLv2+" : "LGPL-2.0-or-later", "LGPLv2.1+" : "LGPL-2.1-or-later", "LGPLv2.1" : "LGPL-2.1"}'
@@ -219,8 +217,6 @@ python do_dependencytrack_upload () {
     dt_project_name = d.getVar("DEPENDENCYTRACK_PROJECT_NAME")
     dt_project_version = d.getVar("DEPENDENCYTRACK_PROJECT_VERSION")
     dt_parent = d.getVar("DEPENDENCYTRACK_PARENT")
-    dt_parent_name = d.getVar("DEPENDENCYTRACK_PARENT_NAME")
-    dt_parent_version = d.getVar("DEPENDENCYTRACK_PARENT_VERSION")
     dt_auto_create = d.getVar("DEPENDENCYTRACK_AUTO_CREATE")
 
     bb.debug(2, f"Uploading SBOM to project {dt_project} at {dt_url}")
@@ -230,6 +226,7 @@ python do_dependencytrack_upload () {
     }
 
     files = {
+        'parent': dt_parent,
         'autoCreate': (None, dt_auto_create),
         'bom': open(d.getVar("DEPENDENCYTRACK_SBOM"), 'rb')
     }
@@ -243,16 +240,6 @@ python do_dependencytrack_upload () {
                files['projectVersion'] = (None, dt_project_version)
     else:
         files['project'] = dt_project
-
-    if dt_parent == "":
-        if dt_parent_name != "":
-            if dt_parent_version == "":
-               bb.error("DEPENDENCYTRACK_PARENT_VERSION is mandatory if DEPENDENCYTRACK_PARENT_NAME is set")
-            else:
-               files['parentName'] = (None, dt_parent_name)
-               files['parentVersion'] = (None, dt_parent_version)
-    else:
-        files['parent'] = dt_parent
 
     try:
         response = requests.post(dt_url, headers=headers, files=files)
