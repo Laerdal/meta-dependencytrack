@@ -80,7 +80,7 @@ python do_dependencytrack_collect() {
 
     # update it with the new package info
 
-    filter_suffixes = ("-native", "-dbg", "-staticdev", "-doc", "-src", "-locale")
+    filter_suffixes = ("-native", "-dbg", "-staticdev", "-doc", "-src", "-locale", "-dev")
 
     cve_mapping_path = d.getVar("DEPENDENCYTRACK_TMP") + "/cve_mapping.json"
     cve_mapping = read_json(d, cve_mapping_path) if os.path.exists(cve_mapping_path) else dict()
