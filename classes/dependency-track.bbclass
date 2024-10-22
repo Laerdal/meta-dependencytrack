@@ -75,7 +75,8 @@ python do_dependencytrack_collect() {
     import hashlib
     # load the bom
     name = d.getVar("CVE_PRODUCT")
-    version = d.getVar("CVE_VERSION")
+    # filter out +gitAUTOINC from version
+    version = d.getVar("CVE_VERSION").split("+git")[0]
     sbom = read_sbom(d)
 
     # update it with the new package info
@@ -343,8 +344,6 @@ def get_cpe_ids(cve_product, version):
     """
     Get list of CPE identifiers for the given product and version
     """
-
-    version = version.split("+git")[0]
 
     cpe_ids = []
     for product in cve_product.split():
