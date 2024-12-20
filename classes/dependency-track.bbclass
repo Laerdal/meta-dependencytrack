@@ -5,6 +5,7 @@
 # be overriden per recipe (for example tiff.bb sets CVE_PRODUCT=libtiff).
 CVE_PRODUCT ??= "${BPN}"
 CVE_VERSION ??= "${PV}"
+CVE_PART ??= "a"
 
 DEPENDENCYTRACK_DIR ??= "${DEPLOY_DIR}/dependency-track/${MACHINE}"
 DEPENDENCYTRACK_SBOM ??= "${DEPENDENCYTRACK_DIR}/bom.json"
@@ -133,6 +134,8 @@ python do_dependencytrack_collect() {
     dependencies_path = d.getVar("DEPENDENCYTRACK_TMP") + "/dependencies.json"
     temp_dependencies_json = read_json(d, dependencies_path) if os.path.exists(dependencies_path) else dict()
 
+    part = d.getVar("CVE_PART")
+
     # name is set to default, so CVE_PRODUCT not set
     if name == d.getVar("BPN"):
         # there might be several packages in 1 recipe and some of them are needed to be filted out
@@ -142,9 +145,9 @@ python do_dependencytrack_collect() {
             ), 
             d.getVar("PACKAGES").split()):
             # only 1 CPE product
-            add_component(get_cpe_ids(package, version)[0], temp_dependencies_json, package, version)
+            add_component(get_cpe_ids(package, version, part)[0], temp_dependencies_json, package, version)
     else:
-        for index, o in enumerate(get_cpe_ids(name, version)):
+        for index, o in enumerate(get_cpe_ids(name, version, part)):
             add_component(o, temp_dependencies_json, name, version)
 
     # write it back to the deploy directory
@@ -340,7 +343,7 @@ def get_licenses(d) :
         return license_json 
     return None
 
-def get_cpe_ids(cve_product, version):
+def get_cpe_ids(cve_product, version, part):
     """
     Get list of CPE identifiers for the given product and version
     """
@@ -354,7 +357,7 @@ def get_cpe_ids(cve_product, version):
         else:
             vendor = "*"
 
-        cpe_id = 'cpe:2.3:a:{}:{}:{}:*:*:*:*:*:*:*'.format(vendor, product, version)
+        cpe_id = 'cpe:2.3:{}:{}:{}:{}:*:*:*:*:*:*:*'.format(part, vendor, product, version)
         cpe_ids.append(type('',(object,),{"cpe": cpe_id, "product": product, "vendor": vendor if vendor != "*" else ""})())
 
     return cpe_ids
