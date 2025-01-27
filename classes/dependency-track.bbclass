@@ -5,10 +5,12 @@
 # be overriden per recipe (for example tiff.bb sets CVE_PRODUCT=libtiff).
 CVE_PRODUCT ??= "${BPN}"
 CVE_VERSION ??= "${PV}"
-CVE_PART ??= "a"
+
+CVE_CHECK_IGNORE ??= ""
 
 DEPENDENCYTRACK_DIR ??= "${DEPLOY_DIR}/dependency-track/${MACHINE}"
-DEPENDENCYTRACK_SBOM ??= "${DEPENDENCYTRACK_DIR}/bom.json"
+DEPENDENCYTRACK_SBOM ??= "${DEPENDENCYTRACK_DIR}/sbom.json"
+DEPENDENCYTRACK_VEX ??= "${DEPENDENCYTRACK_DIR}/vex.json"
 DEPENDENCYTRACK_TMP ??= "${TMPDIR}/dependency-track/${MACHINE}"
 DEPENDENCYTRACK_LOCK ??= "${DEPENDENCYTRACK_TMP}/bom.lock"
 
@@ -23,27 +25,27 @@ DEPENDENCYTRACK_PROJECT_VERSION ??= ""
 DEPENDENCYTRACK_PARENT ??= ""
 DEPENDENCYTRACK_AUTO_CREATE ??= "false"
 
-DT_LICENSE_CONVERSION_MAP ??= '{ "GPLv2+" : "GPL-2.0-or-later", "GPLv2" : "GPL-2.0", "LGPLv2" : "LGPL-2.0", "LGPLv2+" : "LGPL-2.0-or-later", "LGPLv2.1+" : "LGPL-2.1-or-later", "LGPLv2.1" : "LGPL-2.1"}'
+DT_LICENSE_CONVERSION_MAP ??= "{ "GPLv2+" : "GPL-2.0-or-later", "GPLv2" : "GPL-2.0", "LGPLv2" : "LGPL-2.0", "LGPLv2+" : "LGPL-2.0-or-later", "LGPLv2.1+" : "LGPL-2.1-or-later", "LGPLv2.1" : "LGPL-2.1"}"
+
+#python all imports
+# import uuid, hashlib, json, base64, requests, re
+# from datetime import datetime, timezone
+# from oe.cve_check import get_patched_cves
+# from oe.rootfs import image_list_installed_packages
+# from pathlib import Path
 
 python do_dependencytrack_init() {
-    import uuid
+    import uuid, hashlib
     from datetime import datetime, timezone
-    import hashlib
 
-    sbom_file = d.getVar("DEPENDENCYTRACK_SBOM")
+    deptrack_dir = d.getVar("DEPENDENCYTRACK_DIR")
+    if not os.path.exists(deptrack_dir):
+        bb.debug(2, "Creating cyclonedx directory: %s" % deptrack_dir)
+        bb.utils.mkdirhier(deptrack_dir)
 
-    if os.path.exists(sbom_file):
-        return
-
-    sbom_dir = d.getVar("DEPENDENCYTRACK_DIR")
-    if not os.path.exists(sbom_dir):
-        bb.debug(2, "Creating cyclonedx directory: %s" % sbom_dir)
-        bb.utils.mkdirhier(sbom_dir)
-
-    bb.debug(2, "Creating empty sbom")
-    write_sbom(d, {
+    default_structure = {
         "bomFormat": "CycloneDX",
-        "specVersion": "1.5",
+        "specVersion": "1.6",
         "serialNumber": "urn:uuid:" + str(uuid.uuid4()),
         "version": 1,
         "metadata": {
@@ -59,28 +61,37 @@ python do_dependencytrack_init() {
                 "type": "operating-system",
                 "bom-ref": hashlib.md5(d.getVar("MACHINE", False).encode()).hexdigest(),
                 "group": d.getVar("MACHINE", False),
-                "name": d.getVar("DISTRO_NAME", False) + "-" + d.getVar('MACHINE').replace("kontron-", ""),
+                "name": d.getVar("DISTRO_NAME", False) + "-" + d.getVar("MACHINE").replace("kontron-", ""),
                 "version": d.getVar("SECUREOS_RELEASE_VERSION", True)
             }
         },
         "components": [],
         "dependencies": [],
-    })
+        "vulnerabilities": [],
+    }
+
+    if not os.path.isfile(d.getVar("DEPENDENCYTRACK_SBOM")):
+        bb.debug(2, "Creating empty sbom")
+        write_sbom(d, default_structure)
+
+    if not os.path.isfile(d.getVar("DEPENDENCYTRACK_VEX")):
+        bb.debug(2, "Creating empty vex")
+        write_vex(d, default_structure)
 }
+
 addhandler do_dependencytrack_init
 do_dependencytrack_init[eventmask] = "bb.event.BuildStarted"
 
 python do_dependencytrack_collect() {
-    import json
+    import json, hashlib
     from pathlib import Path
-    import hashlib
+    from oe.cve_check import get_patched_cves
+
     # load the bom
     name = d.getVar("CVE_PRODUCT")
     # filter out +gitAUTOINC from version
     version = d.getVar("CVE_VERSION").split("+git")[0]
     sbom = read_sbom(d)
-
-    # update it with the new package info
 
     filter_suffixes = ("-native", "-dbg", "-staticdev", "-doc", "-src", "-locale", "-dev")
 
@@ -92,7 +103,7 @@ python do_dependencytrack_collect() {
 
     def add_component(cpe_info, temp_dependencies_json, name, version):
         bb.debug(2, f"Collecting package {name}@{version} ({cpe_info.cpe})")
-        if not next((c for c in sbom["components"] if c["cpe"] == cpe_info.cpe), None):
+        if next((c for c in sbom["components"] if c["cpe"] == cpe_info.cpe), None) is None:
             component_json = {
                 "type": "application",
                 "bom-ref": cpe_info.product + " - " + hashlib.md5(cpe_info.cpe.encode()).hexdigest(),
@@ -113,7 +124,7 @@ python do_dependencytrack_collect() {
 
             sbom["components"].append(component_json)
 
-        dependencies = d.getVar(f'RDEPENDS:{name}', True) or ""
+        dependencies = d.getVar(f"RDEPENDS:{name}", True) or ""
         if dependencies.strip():
             result_list = []
             for dep in dependencies.split():
@@ -134,8 +145,6 @@ python do_dependencytrack_collect() {
     dependencies_path = d.getVar("DEPENDENCYTRACK_TMP") + "/dependencies.json"
     temp_dependencies_json = read_json(d, dependencies_path) if os.path.exists(dependencies_path) else dict()
 
-    part = d.getVar("CVE_PART")
-
     # name is set to default, so CVE_PRODUCT not set
     if name == d.getVar("BPN"):
         # there might be several packages in 1 recipe and some of them are needed to be filted out
@@ -145,15 +154,23 @@ python do_dependencytrack_collect() {
             ), 
             d.getVar("PACKAGES").split()):
             # only 1 CPE product
-            add_component(get_cpe_ids(package, version, part)[0], temp_dependencies_json, package, version)
+            add_component(get_cpe_ids(package, version)[0], temp_dependencies_json, package, version)
     else:
-        for index, o in enumerate(get_cpe_ids(name, version, part)):
+        for index, o in enumerate(get_cpe_ids(name, version)):
             add_component(o, temp_dependencies_json, name, version)
 
     # write it back to the deploy directory
     write_sbom(d, sbom)
     write_json(d, temp_dependencies_json, dependencies_path)
     write_json(d, cve_mapping, cve_mapping_path)
+
+    #Collecting patched and ignored CVEs
+    vex = read_vex(d)
+    for patch in get_patched_cves(d):
+        add_patched_vulnerabitily(vex, patch)
+    for ignore in d.getVar("CVE_CHECK_IGNORE").split():
+        add_ignored_vulnerability(vex, ignore)
+    write_vex(d, vex)
 }
 
 addtask dependencytrack_collect before do_build after do_fetch
@@ -162,14 +179,11 @@ do_dependencytrack_collect[lockfiles] += "${DEPENDENCYTRACK_LOCK}"
 do_rootfs[recrdeptask] += "do_dependencytrack_collect"
 
 python do_dependencytrack_upload () {
-    import json
-    import base64
-    import hashlib
-    import requests
+    import json, base64, hashlib, requests
     from pathlib import Path
-    from oe.rootfs import image_list_installed_packages
 
     sbom = read_sbom(d)
+    vex = read_vex(d)
 
     installed_pkgs = read_json(d, d.getVar("DEPENDENCYTRACK_TMP") + "/installed_packages.json")
     pkgs_names = list(installed_pkgs.keys())
@@ -210,14 +224,18 @@ python do_dependencytrack_upload () {
     # add dependencies for components that are not in dependsOn
     sbom["dependencies"].append({ "ref": hashlib.md5(d.getVar("MACHINE", False).encode()).hexdigest(), "dependsOn": list(refs_not_in_depends_on) })
 
+    #for easy diffing
+    sbom["components"] = sorted(sbom["components"], key=lambda x: x["name"])
+    vex["vulnerabilities"] = sorted(vex["vulnerabilities"], key=lambda x: x["id"])
     write_sbom(d, sbom)
+    write_vex(d, vex)
 
-    dt_upload = bb.utils.to_boolean(d.getVar('DEPENDENCYTRACK_UPLOAD'))
+    dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
     if not dt_upload:
         return
 
     dt_project = d.getVar("DEPENDENCYTRACK_PROJECT")
-    dt_url = f"{d.getVar('DEPENDENCYTRACK_API_URL')}/v1/bom"
+    dt_url = d.getVar("DEPENDENCYTRACK_API_URL") + "/v1/bom"
     dt_project_name = d.getVar("DEPENDENCYTRACK_PROJECT_NAME")
     dt_project_version = d.getVar("DEPENDENCYTRACK_PROJECT_VERSION")
     dt_parent = d.getVar("DEPENDENCYTRACK_PARENT")
@@ -230,9 +248,9 @@ python do_dependencytrack_upload () {
     }
 
     files = {
-        'parentUUID': dt_parent,
-        'autoCreate': (None, dt_auto_create),
-        'bom': open(d.getVar("DEPENDENCYTRACK_SBOM"), 'rb')
+        "parentUUID": dt_parent,
+        "autoCreate": (None, dt_auto_create),
+        "bom": open(d.getVar("DEPENDENCYTRACK_SBOM"), "rb")
     }
 
     if dt_project == "":
@@ -240,28 +258,25 @@ python do_dependencytrack_upload () {
             if dt_project_version == "":
                bb.error("DEPENDENCYTRACK_PROJECT_VERSION is mandatory if DEPENDENCYTRACK_PROJECT_NAME is set")
             else:
-               files['projectName'] = (None, dt_project_name)
-               files['projectVersion'] = (None, dt_project_version)
+               files["projectName"] = (None, dt_project_name)
+               files["projectVersion"] = (None, dt_project_version)
     else:
-        files['project'] = dt_project
+        files["project"] = dt_project
 
-    try:
-        response = requests.post(dt_url, headers=headers, files=files)
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        bb.error(f"Failed to upload SBOM to Dependency Track server at {dt_url}. [HTTP Error] {e}")
-    except requests.exceptions.RequestException as e:
-        bb.error(f"Failed to upload SBOM to Dependency Track server at {dt_url}. [Error] {e}")
-    else:
-        bb.debug(2, f"SBOM successfully uploaded to {dt_url}")
+    # try:
+    #     response = requests.post(dt_url, headers=headers, files=files)
+    #     response.raise_for_status()
+    # except requests.exceptions.HTTPError as e:
+    #     bb.error(f"Failed to upload SBOM to Dependency Track server at {dt_url}. [HTTP Error] {e}")
+    # except requests.exceptions.RequestException as e:
+    #     bb.error(f"Failed to upload SBOM to Dependency Track server at {dt_url}. [Error] {e}")
+    # else:
+    #     bb.debug(2, f"SBOM successfully uploaded to {dt_url}")
 }
 
 python do_dependencytrack_installed () {
-    from pathlib import Path
     from oe.rootfs import image_list_installed_packages
-
     pkgs = image_list_installed_packages(d)
-
     write_json(d, pkgs, d.getVar("DEPENDENCYTRACK_TMP") + "/installed_packages.json")
 }
 
@@ -272,6 +287,8 @@ do_dependencytrack_upload[eventmask] = "bb.event.BuildCompleted"
 
 def read_sbom(d):
     return read_json(d, d.getVar("DEPENDENCYTRACK_SBOM"))
+def read_vex(d):
+    return read_json(d, d.getVar("DEPENDENCYTRACK_VEX"))
 
 def read_json(d, path):
     import json
@@ -280,13 +297,13 @@ def read_json(d, path):
 
 def write_sbom(d, sbom):
     write_json(d, sbom, d.getVar("DEPENDENCYTRACK_SBOM"))
+def write_vex(d, vex):
+    write_json(d, vex, d.getVar("DEPENDENCYTRACK_VEX"))
 
 def write_json(d, data, path):
     import json
     from pathlib import Path
-    Path(path).write_text(
-        json.dumps(data, indent=2)
-    )
+    Path(path).write_text(json.dumps(data, indent=2))
 
 def get_references(d):
     import re
@@ -306,14 +323,14 @@ def get_references(d):
     return refs
 
 def get_licenses(d) :
-    from pathlib import Path
     import json
+    from pathlib import Path
     license_expression = d.getVar("LICENSE")
     if license_expression:
         license_json = []
         licenses = license_expression.replace("|", "").replace("&", "").split()
         for license in licenses:
-            license_conversion_map = json.loads(d.getVar('DT_LICENSE_CONVERSION_MAP'))
+            license_conversion_map = json.loads(d.getVar("DT_LICENSE_CONVERSION_MAP"))
             converted_license = None
             try:
                 converted_license =  license_conversion_map[license]
@@ -322,17 +339,14 @@ def get_licenses(d) :
             if not converted_license:
                 converted_license = license
             # Search for the license in COMMON_LICENSE_DIR and LICENSE_PATH
-            for directory in [d.getVar('COMMON_LICENSE_DIR')] + (d.getVar('LICENSE_PATH') or '').split():
+            for directory in [d.getVar("COMMON_LICENSE_DIR")] + (d.getVar("LICENSE_PATH") or "").split():
                 try:
                     with (Path(directory) / converted_license).open(errors="replace") as f:
                         extractedText = f.read()
                         license_data = {
                             "license": {
-                                "name" : converted_license,
-                                "text": {
-                                    "contentType": "text/plain",
-                                    "content": extractedText
-                                    }
+                                "name": converted_license,
+                                "text": {"contentType": "text/plain", "content": extractedText}
                             }
                         }
                         license_json.append(license_data)
@@ -343,7 +357,7 @@ def get_licenses(d) :
         return license_json 
     return None
 
-def get_cpe_ids(cve_product, version, part):
+def get_cpe_ids(cve_product, version):
     """
     Get list of CPE identifiers for the given product and version
     """
@@ -357,7 +371,26 @@ def get_cpe_ids(cve_product, version, part):
         else:
             vendor = "*"
 
-        cpe_id = 'cpe:2.3:{}:{}:{}:{}:*:*:*:*:*:*:*'.format(part, vendor, product, version)
-        cpe_ids.append(type('',(object,),{"cpe": cpe_id, "product": product, "vendor": vendor if vendor != "*" else ""})())
+        cpe_id = "cpe:2.3:a:{}:{}:{}:*:*:*:*:*:*:*".format(vendor, product, version)
+        cpe_ids.append(type("",(object,),{"cpe": cpe_id, "product": product, "vendor": vendor if vendor != "*" else ""})())
 
     return cpe_ids
+
+def add_patched_vulnerabitily(vex, cve_id):
+    vulnerability = next((v for v in vex["vulnerabilities"] if v["id"] == cve_id), None)
+    if vulnerability is None:
+        add_vulnerability(vex, cve_id, "resolved", "update", "CVE_CHECK data : The vulnerability has been Patched!")
+    else : # (patch is higher priority)
+        vulnerability["analysis"].update({ "state" : "resolved", "response" : ["update"], "detail" : "CVE_CHECK data : The vulnerability has been Patched!" })
+
+def add_ignored_vulnerability(vex, cve_id):
+    if next((v for v in vex["vulnerabilities"] if v["id"] == cve_id), None) is None:
+        add_vulnerability(vex, cve_id, "resolved", "will_not_fix", "CVE_CHECK data : The vulnerability has been Ignored!")
+
+def add_vulnerability(vex, cve_id, analysis_state, analysis_response, analysis_detail):
+    vex["vulnerabilities"].append({
+        "id"      : cve_id,
+        "source"  : {"name": "NVD", "url" : "https://nvd.nist.gov/"},
+        "analysis": {"state": analysis_state, "response": [analysis_response], "detail": analysis_detail},
+        "affects" : [{"ref": vex["metadata"]["component"]["bom-ref"]}]
+    })
