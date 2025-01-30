@@ -235,13 +235,14 @@ python do_dependencytrack_upload () {
         return
 
     dt_project = d.getVar("DEPENDENCYTRACK_PROJECT")
-    dt_url = d.getVar("DEPENDENCYTRACK_API_URL") + "/v1/bom"
+    dt_url_bom = d.getVar("DEPENDENCYTRACK_API_URL") + "/v1/bom"
+    dt_url_vex = d.getVar("DEPENDENCYTRACK_API_URL") + "/v1/vex"
     dt_project_name = d.getVar("DEPENDENCYTRACK_PROJECT_NAME")
     dt_project_version = d.getVar("DEPENDENCYTRACK_PROJECT_VERSION")
     dt_parent = d.getVar("DEPENDENCYTRACK_PARENT")
     dt_auto_create = d.getVar("DEPENDENCYTRACK_AUTO_CREATE")
 
-    bb.debug(2, f"Uploading SBOM to project {dt_project} at {dt_url}")
+    # bb.debug(2, f"Uploading SBOM to project {dt_project} at {dt_url}")
 
     headers = {
         "X-API-Key": d.getVar("DEPENDENCYTRACK_API_KEY")
@@ -250,7 +251,6 @@ python do_dependencytrack_upload () {
     files = {
         "parentUUID": dt_parent,
         "autoCreate": (None, dt_auto_create),
-        "bom": open(d.getVar("DEPENDENCYTRACK_SBOM"), "rb")
     }
 
     if dt_project == "":
@@ -263,15 +263,30 @@ python do_dependencytrack_upload () {
     else:
         files["project"] = dt_project
 
+    bom_files = vex_files = files
+    
+    bom_files["bom"] = open(d.getVar("DEPENDENCYTRACK_SBOM"), "rb")
+    vex_files["vex"] = open(d.getVar("DEPENDENCYTRACK_VEX"), "rb")
+    
     try:
-        response = requests.post(dt_url, headers=headers, files=files)
+        response = requests.post(dt_url_bom, headers=headers, files=bom_files)
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
-        bb.error(f"Failed to upload SBOM to Dependency Track server at {dt_url}. [HTTP Error] {e}")
+        bb.error(f"Failed to upload SBOM to Dependency Track server at {dt_url_bom}. [HTTP Error] {e}")
     except requests.exceptions.RequestException as e:
-        bb.error(f"Failed to upload SBOM to Dependency Track server at {dt_url}. [Error] {e}")
+        bb.error(f"Failed to upload SBOM to Dependency Track server at {dt_url_bom}. [Error] {e}")
     else:
-        bb.debug(2, f"SBOM successfully uploaded to {dt_url}")
+        bb.debug(2, f"SBOM successfully uploaded to {dt_url_bom}")
+
+    try:
+        response = requests.post(dt_url_vex, headers=headers, files=vex_files)
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        bb.error(f"Failed to upload VEX to Dependency Track server at {dt_url_vex}. [HTTP Error] {e}")
+    except requests.exceptions.RequestException as e:
+        bb.error(f"Failed to upload VEX to Dependency Track server at {dt_url_vex}. [Error] {e}")
+    else:
+        bb.debug(2, f"VEX successfully uploaded to {dt_url_vex}")
 }
 
 python do_dependencytrack_installed () {
@@ -339,16 +354,11 @@ def get_licenses(d) :
             for directory in [d.getVar("COMMON_LICENSE_DIR")] + (d.getVar("LICENSE_PATH") or "").split():
                 try:
                     with (Path(directory) / converted_license).open(errors="replace") as f:
-                        extractedText = f.read()
                         license_data = {"license": {"name": converted_license}}
-
-                                # ,"text": {"contentType": "text/plain", "content": extractedText}
-                            # }
                         license_json.append(license_data)
                         break
                 except FileNotFoundError:
                     pass
-            # license_json.append({"expression" : license_expression})
         return license_json 
     return None
 
@@ -376,7 +386,7 @@ def add_patched_vulnerabitily(vex, cve_id):
     if vulnerability is None:
         add_vulnerability(vex, cve_id, "resolved", "update", "CVE_CHECK data : The vulnerability has been Patched!")
     else : # (patch is higher priority)
-        vulnerability["analysis"].update({ "state" : "resolved", "response" : ["update"], "detail" : "CVE_CHECK data : The vulnerability has been Patched!" })
+        vulnerability["analysis"].update({ "state": "resolved", "response": ["update"], "detail": "CVE_CHECK data: The vulnerability has been Patched!" })
 
 def add_ignored_vulnerability(vex, cve_id):
     if next((v for v in vex["vulnerabilities"] if v["id"] == cve_id), None) is None:
