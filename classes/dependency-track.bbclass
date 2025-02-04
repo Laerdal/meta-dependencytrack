@@ -416,6 +416,10 @@ def upload_vex(d):
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
         bb.error(f"Failed to upload VEX to Dependency Track server at {dt_url_vex}. [HTTP Error] {e}")
+        bb.error(f"Response: {response.text}")
+        bb.error(f"Request: {response.request.body}")
+        bb.error(f"Request_headers: {headers}")
+        bb.error(f"Request_files: {files}")
     except requests.exceptions.RequestException as e:
         bb.error(f"Failed to upload VEX to Dependency Track server at {dt_url_vex}. [Error] {e}")
     else:
