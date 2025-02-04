@@ -73,13 +73,12 @@ python do_dependencytrack_init() {
     if not os.path.isfile(d.getVar("DEPENDENCYTRACK_SBOM")):
         bb.debug(2, "Creating empty sbom")
         write_sbom(d, default_structure)
+        # preload dep-tracker with the project
+        # upload_bom(d)
 
     if not os.path.isfile(d.getVar("DEPENDENCYTRACK_VEX")):
         bb.debug(2, "Creating empty vex")
         write_vex(d, default_structure)
-
-    # preload dep-tracker with the project
-    upload_bom(d)
 }
 
 addhandler do_dependencytrack_init
@@ -237,7 +236,7 @@ python do_dependencytrack_upload () {
     if not dt_upload:
         return
 
-    upload_vex(d)
+#    upload_vex(d)
     upload_bom(d)
 }
 
@@ -366,17 +365,13 @@ def upload_bom(d):
     headers = {"X-API-Key": d.getVar("DEPENDENCYTRACK_API_KEY")}
     files = {
         "parentUUID": dt_parent,
-        "autoCreate": (None, dt_auto_create),
-        "bom": open(d.getVar("DEPENDENCYTRACK_SBOM"), "rb")
+        "autoCreate": dt_auto_create,
+        "bom": open(d.getVar("DEPENDENCYTRACK_SBOM"), 'rb')
     }
 
     if dt_project == "":
-        if dt_project_name != "":
-            if dt_project_version == "":
-               bb.error("DEPENDENCYTRACK_PROJECT_VERSION is mandatory if DEPENDENCYTRACK_PROJECT_NAME is set")
-            else:
-               files["projectName"] = (None, dt_project_name)
-               files["projectVersion"] = (None, dt_project_version)
+        files["projectName"] = dt_project_name
+        files["projectVersion"] = dt_project_version
     else:
         files["project"] = dt_project
 
@@ -394,20 +389,16 @@ def upload_vex(d):
     import requests
 
     dt_project = d.getVar("DEPENDENCYTRACK_PROJECT")
-    dt_url_vex = d.getVar("DEPENDENCYTRACK_API_URL") + "/v1/vex"
+    dt_url_vex = d.getVar('DEPENDENCYTRACK_API_URL') + "/v1/vex"
     dt_project_name = d.getVar("DEPENDENCYTRACK_PROJECT_NAME")
     dt_project_version = d.getVar("DEPENDENCYTRACK_PROJECT_VERSION")
 
     headers = {"X-API-Key": d.getVar("DEPENDENCYTRACK_API_KEY")}
-    files = {"vex": open(d.getVar("DEPENDENCYTRACK_VEX"), "rb")}
+    files   = {"vex": open(d.getVar("DEPENDENCYTRACK_VEX"), "rb")}
 
     if dt_project == "":
-        if dt_project_name != "":
-            if dt_project_version == "":
-               bb.error("DEPENDENCYTRACK_PROJECT_VERSION is mandatory if DEPENDENCYTRACK_PROJECT_NAME is set")
-            else:
-               files["projectName"] = (None, dt_project_name)
-               files["projectVersion"] = (None, dt_project_version)
+        files["projectName"] = dt_project_name
+        files["projectVersion"] = dt_project_version
     else:
         files["project"] = dt_project
 
@@ -416,10 +407,7 @@ def upload_vex(d):
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
         bb.error(f"Failed to upload VEX to Dependency Track server at {dt_url_vex}. [HTTP Error] {e}")
-        bb.error(f"Response: {response.text}")
-        bb.error(f"Request: {response.request.body}")
-        bb.error(f"Request_headers: {headers}")
-        bb.error(f"Request_files: {files}")
+        bb.error(f"Response: {response.status_code} -> {response.reason}")
     except requests.exceptions.RequestException as e:
         bb.error(f"Failed to upload VEX to Dependency Track server at {dt_url_vex}. [Error] {e}")
     else:
