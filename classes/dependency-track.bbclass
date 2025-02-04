@@ -237,8 +237,8 @@ python do_dependencytrack_upload () {
     if not dt_upload:
         return
 
-    upload_bom(d)
     upload_vex(d)
+    upload_bom(d)
 }
 
 python do_dependencytrack_installed () {
