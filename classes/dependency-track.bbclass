@@ -192,7 +192,6 @@ python do_dependencytrack_upload () {
             installed_pkgs[package]["deps"].extend(dependencies)
 
     components_dict = {component["name"]: component for component in sbom["components"]}
-
     for sbom_component in sbom["components"]:
         pkg = installed_pkgs.get(sbom_component["name"])
 
@@ -210,13 +209,10 @@ python do_dependencytrack_upload () {
 
     # Extract all ref values
     all_refs = {component["bom-ref"] for component in sbom["components"]}
-
     # Extract all dependsOn values
     all_depends_on = {ref for dependency in sbom["dependencies"] for ref in dependency.get("dependsOn", [])}
-
     # Find refs that are not in dependsOn
     refs_not_in_depends_on = all_refs - all_depends_on
-
     # add dependencies for components that are not in dependsOn
     sbom["dependencies"].append({ "ref": hashlib.md5(d.getVar("MACHINE", False).encode()).hexdigest(), "dependsOn": list(refs_not_in_depends_on) })
 
@@ -230,8 +226,8 @@ python do_dependencytrack_upload () {
     if not dt_upload:
         return
 
-    upload_vex(d)
     upload_sbom(d)
+    upload_vex(d)
 }
 
 python do_dependencytrack_installed () {
