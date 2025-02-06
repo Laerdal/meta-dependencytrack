@@ -14,8 +14,7 @@ DEPENDENCYTRACK_VEX ??= "${DEPENDENCYTRACK_DIR}/vex.json"
 DEPENDENCYTRACK_TMP ??= "${TMPDIR}/dependency-track/${MACHINE}"
 DEPENDENCYTRACK_LOCK ??= "${DEPENDENCYTRACK_TMP}/bom.lock"
 
-# Set DEPENDENCYTRACK_UPLOAD to False if you want to control the upload in other
-# steps.
+# Set DEPENDENCYTRACK_UPLOAD to False if you want to control the upload in other steps.
 DEPENDENCYTRACK_UPLOAD ??= "False"
 DEPENDENCYTRACK_PROJECT ??= ""
 DEPENDENCYTRACK_API_URL ??= "http://localhost:8081/api"
@@ -66,8 +65,6 @@ python do_dependencytrack_init() {
     if not os.path.isfile(d.getVar("DEPENDENCYTRACK_SBOM")):
         bb.debug(2, "Creating empty sbom")
         write_sbom(d, default_structure)
-
-        # preload dep-tracker with the project so vex can be uploaded
         upload_sbom(d)
 
     if not os.path.isfile(d.getVar("DEPENDENCYTRACK_VEX")):
