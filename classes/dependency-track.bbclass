@@ -173,10 +173,10 @@ python do_dependencytrack_collect() {
 
     # Collecting patched and ignored CVEs
     vex = read_vex(d)
-    for patch in get_patched_cves(d):
-        add_patched_vulnerabitily(vex, patch)
-    for ignore in d.getVar("CVE_CHECK_IGNORE").split():
-        add_ignored_vulnerability(vex, ignore)
+    for patched_cve_id in get_patched_cves(d):
+        add_patched_vulnerabitily(vex, patched_cve_id)
+    for ignored_cve_id in d.getVar("CVE_CHECK_IGNORE").split():
+        add_ignored_vulnerability(vex, ignored_cve_id)
     write_vex(d, vex)
 }
 
@@ -233,10 +233,6 @@ python do_dependencytrack_upload() {
     sbom["dependencies"].append({"ref": hashlib.md5(d.getVar(
         "MACHINE", False).encode()).hexdigest(), "dependsOn": list(refs_not_in_depends_on)})
 
-    # for easy diffing
-    sbom["components"] = sorted(sbom["components"], key=lambda x: x["name"])
-    vex["vulnerabilities"] = sorted(
-        vex["vulnerabilities"], key=lambda x: x["id"])
     write_sbom(d, sbom)
     write_vex(d, vex)
 
@@ -373,7 +369,7 @@ def add_patched_vulnerabitily(vex, cve_id):
     if vulnerability is None:
         add_vulnerability(vex, cve_id, "resolved", "update",
                           "CVE_CHECK data : The vulnerability has been Patched!")
-    else:  # (patch is higher priority)
+    else:  # (write to patched, even if already ignored)
         vulnerability["analysis"].update({"state": "resolved", "response": [
                                          "update"], "detail": "CVE_CHECK data: The vulnerability has been Patched!"})
 
