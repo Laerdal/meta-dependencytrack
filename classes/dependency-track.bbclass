@@ -5,6 +5,7 @@
 # be overriden per recipe (for example tiff.bb sets CVE_PRODUCT=libtiff).
 CVE_PRODUCT ??= "${BPN}"
 CVE_VERSION ??= "${PV}"
+CVE_PART ??= "a"
 
 CVE_CHECK_IGNORE ??= ""
 
@@ -14,7 +15,8 @@ DEPENDENCYTRACK_VEX ??= "${DEPENDENCYTRACK_DIR}/vex.json"
 DEPENDENCYTRACK_TMP ??= "${TMPDIR}/dependency-track/${MACHINE}"
 DEPENDENCYTRACK_LOCK ??= "${DEPENDENCYTRACK_TMP}/bom.lock"
 
-# Set DEPENDENCYTRACK_UPLOAD to False if you want to control the upload in other steps.
+# Set DEPENDENCYTRACK_UPLOAD to False if you want to control the upload in other
+# steps.
 DEPENDENCYTRACK_UPLOAD ??= "False"
 DEPENDENCYTRACK_PROJECT ??= ""
 DEPENDENCYTRACK_API_URL ??= "http://localhost:8081/api"
@@ -65,6 +67,8 @@ python do_dependencytrack_init() {
     if not os.path.isfile(d.getVar("DEPENDENCYTRACK_SBOM")):
         bb.debug(2, "Creating empty sbom")
         write_sbom(d, default_structure)
+
+        # preload dep-tracker with the project so vex can be uploaded
         upload_sbom(d)
 
     if not os.path.isfile(d.getVar("DEPENDENCYTRACK_VEX")):
@@ -138,6 +142,8 @@ python do_dependencytrack_collect() {
     dependencies_path = d.getVar("DEPENDENCYTRACK_TMP") + "/dependencies.json"
     temp_dependencies_json = read_json(d, dependencies_path) if os.path.exists(dependencies_path) else dict()
 
+    part = d.getVar("CVE_PART")
+
     # name is set to default, so CVE_PRODUCT not set
     if name == d.getVar("BPN"):
         # there might be several packages in 1 recipe and some of them are needed to be filted out
@@ -147,9 +153,9 @@ python do_dependencytrack_collect() {
             ), 
             d.getVar("PACKAGES").split()):
             # only 1 CPE product
-            add_component(get_cpe_ids(package, version)[0], temp_dependencies_json, package, version)
+            add_component(get_cpe_ids(package, version, part)[0], temp_dependencies_json, package, version)
     else:
-        for index, o in enumerate(get_cpe_ids(name, version)):
+        for index, o in enumerate(get_cpe_ids(name, version, part)):
             add_component(o, temp_dependencies_json, name, version)
 
     # write it back to the deploy directory
@@ -292,6 +298,16 @@ def get_licenses(d) :
             for directory in [d.getVar("COMMON_LICENSE_DIR")] + (d.getVar("LICENSE_PATH") or "").split():
                 try:
                     with (Path(directory) / converted_license).open(errors="replace") as f:
+                        # extractedText = f.read()
+                        # license_data = {
+                        #     "license": {
+                        #         "name" : converted_license,
+                        #         "text": {
+                        #             "contentType": "text/plain",
+                        #             "content": extractedText
+                        #             }
+                        #     }
+                        # }
                         license_data = {"license": {"name": converted_license}}
                         license_json.append(license_data)
                         break
@@ -300,7 +316,7 @@ def get_licenses(d) :
         return license_json 
     return None
 
-def get_cpe_ids(cve_product, version):
+def get_cpe_ids(cve_product, version, part):
     """
     Get list of CPE identifiers for the given product and version
     """
@@ -314,8 +330,8 @@ def get_cpe_ids(cve_product, version):
         else:
             vendor = "*"
 
-        cpe_id = "cpe:2.3:a:{}:{}:{}:*:*:*:*:*:*:*".format(vendor, product, version)
-        cpe_ids.append(type("",(object,),{"cpe": cpe_id, "product": product, "vendor": vendor if vendor != "*" else ""})())
+        cpe_id = 'cpe:2.3:{}:{}:{}:{}:*:*:*:*:*:*:*'.format(part, vendor, product, version)
+        cpe_ids.append(type('',(object,),{"cpe": cpe_id, "product": product, "vendor": vendor if vendor != "*" else ""})())
 
     return cpe_ids
 
