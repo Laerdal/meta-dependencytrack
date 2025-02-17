@@ -68,10 +68,8 @@ python do_dependencytrack_init() {
         bb.debug(2, "Creating empty sbom")
         write_sbom(d, default_structure)
 
-        dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
-        if dt_upload:
-            # preload dep-tracker with the project so vex can be uploaded
-            upload_sbom(d)
+        # Upload minimal sbom so that the project is created and is valid for vex upload later
+        upload_sbom(d)
 
     if not os.path.isfile(d.getVar("DEPENDENCYTRACK_VEX")):
         bb.debug(2, "Creating empty vex")
@@ -236,13 +234,9 @@ python do_dependencytrack_upload() {
         "MACHINE", False).encode()).hexdigest(), "dependsOn": list(refs_not_in_depends_on)})
 
     write_sbom(d, sbom)
-    write_vex(d, vex)
-
-    dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
-    if not dt_upload:
-        return
-
     upload_sbom(d)
+
+    write_vex(d, vex)
     upload_vex(d)
 }
 
@@ -382,6 +376,10 @@ def add_vulnerability(vex, cve_id, analysis_state, analysis_response, analysis_d
 
 
 def upload_sbom(d):
+    dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
+    if not dt_upload:
+        return
+
     dt_url = d.getVar("DEPENDENCYTRACK_API_URL") + "/v1/bom"
     dt_parent = d.getVar("DEPENDENCYTRACK_PARENT")
     dt_project = d.getVar("DEPENDENCYTRACK_PROJECT")
@@ -404,6 +402,10 @@ def upload_sbom(d):
 
 
 def upload_vex(d):
+    dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
+    if not dt_upload:
+        return
+
     dt_url = d.getVar('DEPENDENCYTRACK_API_URL') + "/v1/vex"
     dt_project = d.getVar("DEPENDENCYTRACK_PROJECT")
     dt_project_name = d.getVar("DEPENDENCYTRACK_PROJECT_NAME")
