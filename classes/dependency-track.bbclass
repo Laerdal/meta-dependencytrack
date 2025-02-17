@@ -68,8 +68,10 @@ python do_dependencytrack_init() {
         bb.debug(2, "Creating empty sbom")
         write_sbom(d, default_structure)
 
-        # preload dep-tracker with the project so vex can be uploaded
-        upload_sbom(d)
+        dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
+        if dt_upload:
+            # preload dep-tracker with the project so vex can be uploaded
+            upload_sbom(d)
 
     if not os.path.isfile(d.getVar("DEPENDENCYTRACK_VEX")):
         bb.debug(2, "Creating empty vex")
@@ -110,7 +112,7 @@ python do_dependencytrack_collect() {
                 "group": cpe_info.vendor,
                 "version": version,
                 "cpe": cpe_info.cpe,
-    }
+            }
 
             license_json = get_licenses(d)
             if license_json:
@@ -322,16 +324,6 @@ def get_licenses(d):
             for directory in [d.getVar("COMMON_LICENSE_DIR")] + (d.getVar("LICENSE_PATH") or "").split():
                 try:
                     with (Path(directory) / converted_license).open(errors="replace") as f:
-                        # extractedText = f.read()
-                        # license_data = {
-                        #     "license": {
-                        #         "name" : converted_license,
-                        #         "text": {
-                        #             "contentType": "text/plain",
-                        #             "content": extractedText
-                        #             }
-                        #     }
-                        # }
                         license_data = {"license": {"name": converted_license}}
                         license_json.append(license_data)
                         break
