@@ -29,7 +29,7 @@ DEPENDENCYTRACK_AUTO_CREATE ??= "false"
 DT_LICENSE_CONVERSION_MAP ??= "{ "GPLv2+" : "GPL-2.0-or-later", "GPLv2" : "GPL-2.0", "LGPLv2" : "LGPL-2.0", "LGPLv2+" : "LGPL-2.0-or-later", "LGPLv2.1+" : "LGPL-2.1-or-later", "LGPLv2.1" : "LGPL-2.1"}"
 
 python do_dependencytrack_init() {
-    import uuid, hashlib
+    import uuid
     from datetime import datetime, timezone
 
     deptrack_dir = d.getVar("DEPENDENCYTRACK_DIR")
@@ -53,7 +53,7 @@ python do_dependencytrack_init() {
             ],
             "component": {
                 "type": "operating-system",
-                "bom-ref": hashlib.md5(d.getVar("MACHINE", False).encode()).hexdigest(),
+                "bom-ref": get_bom_ref(d.getVar("MACHINE", False)),
                 "group": d.getVar("MACHINE", False),
                 "name": d.getVar("DISTRO_NAME", False) + "-" + d.getVar("MACHINE").replace("kontron-", ""),
                 "version": d.getVar("SECUREOS_RELEASE_VERSION", True)
@@ -80,7 +80,7 @@ addhandler do_dependencytrack_init
 do_dependencytrack_init[eventmask] = "bb.event.BuildStarted"
 
 python do_dependencytrack_collect() {
-    import json, hashlib
+    import json
     from pathlib import Path
     from oe.cve_check import get_patched_cves
 
@@ -105,7 +105,7 @@ python do_dependencytrack_collect() {
         if next((c for c in sbom["components"] if c["cpe"] == cpe_info.cpe), None) is None:
             component_json = {
                 "type": "application",
-                "bom-ref": cpe_info.product + " - " + hashlib.md5(cpe_info.cpe.encode()).hexdigest(),
+                "bom-ref": cpe_info.product + " - " + get_bom_ref(cpe_info.cpe),
                 "name": cpe_info.product,
                 "group": cpe_info.vendor,
                 "version": version,
@@ -186,7 +186,7 @@ do_dependencytrack_collect[lockfiles] += "${DEPENDENCYTRACK_LOCK}"
 do_rootfs[recrdeptask] += "do_dependencytrack_collect"
 
 python do_dependencytrack_upload() {
-    import json, base64, hashlib, requests
+    import json, base64, requests
     from pathlib import Path
 
     sbom = read_sbom(d)
@@ -236,8 +236,8 @@ python do_dependencytrack_upload() {
     # Find refs that are not in dependsOn
     refs_not_in_depends_on = all_refs - all_depends_on
     # add dependencies for components that are not in dependsOn
-    sbom["dependencies"].append({"ref": hashlib.md5(d.getVar(
-        "MACHINE", False).encode()).hexdigest(), "dependsOn": list(refs_not_in_depends_on)})
+    sbom["dependencies"].append({"ref": get_bom_ref(d.getVar(
+        "MACHINE", False)), "dependsOn": list(refs_not_in_depends_on)})
 
     write_sbom(d, sbom)
     upload_sbom(d)
@@ -443,3 +443,9 @@ def post_request(url, files):
             f"Failed to upload to Dependency Track server at {url}. [Error] {e}")
     else:
         bb.debug(2, f"File successfully uploaded to {url}")
+
+def get_bom_ref(value):
+    import uuid
+    import hashlib
+    bomhash = hashlib.md5(value.encode())
+    return str(uuid.UUID(bomhash.hexdigest()))
