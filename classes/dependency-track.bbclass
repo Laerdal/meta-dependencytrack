@@ -192,8 +192,14 @@ python do_dependencytrack_upload() {
     sbom = read_sbom(d)
     vex = read_vex(d)
 
-    installed_pkgs = read_json(d, d.getVar(
-        "DEPENDENCYTRACK_TMP") + "/installed_packages.json")
+    install_packages_file = d.getVar(
+        "DEPENDENCYTRACK_TMP") + "/installed_packages.json"
+
+    if not os.path.isfile(install_packages_file):
+        bb.warn("No file: %s, build interrupted?" % install_packages_file)
+        return
+
+    installed_pkgs = read_json(d, install_packages_file)
     pkgs_names = list(installed_pkgs.keys())
 
     temp_dependencies_json = read_json(d, d.getVar(
