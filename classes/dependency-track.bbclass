@@ -105,7 +105,7 @@ python do_dependencytrack_collect() {
         if next((c for c in sbom["components"] if c["cpe"] == cpe_info.cpe), None) is None:
             component_json = {
                 "type": "application",
-                "bom-ref": cpe_info.product + " - " + get_bom_ref(cpe_info.cpe),
+                "bom-ref": get_bom_ref(cpe_info.cpe),
                 "name": cpe_info.product,
                 "group": cpe_info.vendor,
                 "version": version,
@@ -369,16 +369,21 @@ def add_patched_vulnerabitily(vex, cve_id):
 def add_ignored_vulnerability(vex, cve_id):
     if next((v for v in vex["vulnerabilities"] if v["id"] == cve_id), None) is None:
         add_vulnerability(vex, cve_id, "resolved", "will_not_fix",
-                          "CVE_CHECK data : The vulnerability has been Ignored!")
+                          "CVE_CHECK data : The vulnerability has been Ignored!", "code_not_present")
 
 
-def add_vulnerability(vex, cve_id, analysis_state, analysis_response, analysis_detail):
-    vex["vulnerabilities"].append({
-        "id": cve_id,
-        "source": {"name": "NVD", "url": "https://nvd.nist.gov/"},
-        "analysis": {"state": analysis_state, "response": [analysis_response], "detail": analysis_detail},
-        "affects": [{"ref": vex["metadata"]["component"]["bom-ref"]}]
-    })
+def add_vulnerability(vex, cve_id, analysis_state, analysis_response, analysis_detail, analysis_justification = None):
+    vulnerability = {
+            "id": cve_id,
+            "source": {"name": "NVD", "url": "https://nvd.nist.gov/"},
+            "analysis": {"state": analysis_state, "response": [analysis_response], "detail": analysis_detail},
+            "affects": [{"ref": vex["metadata"]["component"]["bom-ref"]}]
+    }
+        
+    if analysis_justification:
+        vulnerability["analysis"]["justification"] = analysis_justification
+           
+    vex["vulnerabilities"].append(vulnerability)
 
 
 def upload_sbom(d):
