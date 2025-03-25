@@ -195,7 +195,6 @@ python do_dependencytrack_upload() {
         return
 
     installed_pkgs = read_json(install_packages_file)
-    pkgs_names = list(installed_pkgs.keys())
 
     temp_dependencies_json = read_json(d.getVar("DEPENDENCYTRACK_TMP") + "/dependencies.json")
     for package, dependencies in temp_dependencies_json.items():
