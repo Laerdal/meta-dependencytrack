@@ -3,7 +3,7 @@ import requests
 
 def post_request(bb, url: str, api_key: str, files: dict) -> None:
     headers = {"X-API-Key": api_key}
-    log_error_string = f"Failed to get from Dependency Track server at {url}, {files.keys() = }. "
+    log_error_string = f"Failed to post to Dependency Track server at {url}, {files.keys() = }. "
 
     try:
         response = requests.post(url, headers=headers, files=files)
