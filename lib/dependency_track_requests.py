@@ -18,7 +18,7 @@ def post_request(bb, url: str, api_key: str, files: dict) -> None:
     except requests.exceptions.RequestException as e:
         bb.error(log_error_string + f"[Error] {e}")
     else:
-        bb.debug(2, f"File successfully uploaded to {url}")
+        bb.debug(2, f"File successfully uploaded to {url}. Response: {response.json()}")
 
 
 def get_request(bb, url: str, api_key: str, files: dict = None, params: dict = None) -> dict | int | None:

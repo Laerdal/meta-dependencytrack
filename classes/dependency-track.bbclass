@@ -149,18 +149,17 @@ python do_dependencytrack_collect() {
 
     # name is set to default, so CVE_PRODUCT not set
     if name == d.getVar("BPN"):
-        # there might be several packages in 1 recipe and some of them are needed to be filted out
+        # there might be several packages in 1 recipe and some of them are needed to be filtered out
         for package in filter(
             lambda s: all(
                 not s.endswith(suffix) for suffix in filter_suffixes
             ),
             d.getVar("PACKAGES").split()):
             # only 1 CPE product
-            add_component(get_cpe_ids(package, version, part)[
-                          0], temp_dependencies_json, package, version)
+            add_component(get_cpe_ids(package, version, part)[0], temp_dependencies_json, package, version)
     else:
-        for index, o in enumerate(get_cpe_ids(name, version, part)):
-            add_component(o, temp_dependencies_json, name, version)
+        for cpe_ids in get_cpe_ids(name, version, part):
+            add_component(cpe_ids, temp_dependencies_json, name, version)
 
     # write it back to the deployment directory
     write_sbom(d, sbom)
@@ -285,7 +284,7 @@ def upload_vex(d):
     if not dt_upload:
         return
 
-    dt_url = d.getVar('DEPENDENCYTRACK_API_URL') + "/v1/vex"
+    dt_url = d.getVar("DEPENDENCYTRACK_API_URL") + "/v1/vex"
     dt_project = d.getVar("DEPENDENCYTRACK_PROJECT")
     dt_project_name = d.getVar("DEPENDENCYTRACK_PROJECT_NAME")
     dt_project_version = d.getVar("DEPENDENCYTRACK_PROJECT_VERSION")
