@@ -2,14 +2,26 @@ import requests
 import enum
 
 
+def post_request(bb, url: str, api_key: str, files: dict) -> requests.Response:
+    return _make_request(bb, url, Method.POST, api_key, files=files, json={}, params={})
+
+
+def put_request(bb, url: str, api_key: str, json: dict) -> requests.Response:
+    return _make_request(bb, url, Method.PUT, api_key, files={}, json=json, params={})
+
+
+def get_request(bb, url: str, api_key: str, params: dict = None) -> requests.Response:
+    return _make_request(bb, url, Method.GET, api_key, files={}, json={}, params=params)
+
+
 class Method(enum.Enum):
     GET = "GET"
     POST = "POST"
     PUT = "PUT"
 
 
-def make_request(bb, url: str, method: Method, api_key: str, files: dict, json: dict,
-                 params: dict) -> requests.Response:
+def _make_request(bb, url: str, method: Method, api_key: str, files: dict, json: dict,
+                  params: dict) -> requests.Response:
     headers = {"X-API-Key": api_key}
     log_error_string = f"Failed to {method} on Dependency Track server at {url}. {files.keys() = }, {json = }, {params = }. "
 
@@ -41,15 +53,3 @@ def make_request(bb, url: str, method: Method, api_key: str, files: dict, json: 
         bb.debug(2, f"Successful {method} to {url}. Response: {response.json()}")
 
     return response
-
-
-def post_request(bb, url: str, api_key: str, files: dict) -> requests.Response:
-    return make_request(bb, url, Method.POST, api_key, files=files, json={}, params={})
-
-
-def put_request(bb, url: str, api_key: str, json: dict) -> requests.Response:
-    return make_request(bb, url, Method.PUT, api_key, files={}, json=json, params={})
-
-
-def get_request(bb, url: str, api_key: str, params: dict = None) -> requests.Response:
-    return make_request(bb, url, Method.GET, api_key, files={}, json={}, params=params)

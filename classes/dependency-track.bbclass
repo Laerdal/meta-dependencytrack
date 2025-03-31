@@ -303,6 +303,10 @@ def get_projects_latest_version(d):
 def clone_project(d, uuid):
     from dependency_track_requests import put_request
 
+    dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
+    if not dt_upload:
+        return
+
     dt_url = d.getVar("DEPENDENCYTRACK_API_URL") + "/v1/project/clone"
 
     put_request(bb, dt_url, d.getVar("DEPENDENCYTRACK_API_KEY"),
