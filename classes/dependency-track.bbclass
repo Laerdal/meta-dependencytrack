@@ -71,6 +71,12 @@ python do_dependencytrack_init() {
     if not os.path.isfile(d.getVar("DEPENDENCYTRACK_VEX")):
         bb.debug(2, "Creating empty vex")
         write_vex(d, default_structure)
+
+    # TODO: do on upload + wait
+    if not project_exists(d):
+        latest_uuid = get_projects_latest_version(d)
+        if latest_uuid:
+            clone_project(d, latest_uuid)
 }
 
 addhandler do_dependencytrack_init
@@ -247,6 +253,69 @@ ROOTFS_POSTUNINSTALL_COMMAND += "do_dependencytrack_installed;"
 
 addhandler do_dependencytrack_upload
 do_dependencytrack_upload[eventmask] = "bb.event.BuildCompleted"
+# ROOTFS_POSTUNINSTALL_COMMAND += "do_dependencytrack_upload;"
+
+def project_exists(d):
+    from dependency_track_requests import get_request
+
+    if d.getVar("DEPENDENCYTRACK_PROJECT") != "":
+        # if project's UUID is set, the project exists
+        return True
+
+    dt_url = d.getVar("DEPENDENCYTRACK_API_URL") + "/v1/project/lookup"
+
+    project_exists_response = get_request(bb, dt_url, d.getVar("DEPENDENCYTRACK_API_KEY"), params={
+        "name": d.getVar("DEPENDENCYTRACK_PROJECT_NAME"),
+        "version": d.getVar("DEPENDENCYTRACK_PROJECT_VERSION")
+    })
+
+    if project_exists_response.status_code == 200:
+        # project was returned
+        return True
+    elif project_exists_response.status_code == 404:
+        # 404 was returned, expected output for non-existent project
+        return False
+    else:
+        bb.error(f"Failed to check if project exists: {project_exists_response}")
+
+    return False
+
+
+def get_projects_latest_version(d):
+    from dependency_track_requests import get_request
+    from urllib.parse import quote
+
+    if d.getVar("DEPENDENCYTRACK_PROJECT") != "":
+        # if project's UUID is set, version is irrelevant
+        return None
+
+    dt_url = d.getVar("DEPENDENCYTRACK_API_URL") + f"/v1/project/latest/{quote(d.getVar('DEPENDENCYTRACK_PROJECT_NAME'))}"
+
+    try:
+        project_response = get_request(bb, dt_url, d.getVar("DEPENDENCYTRACK_API_KEY"), params={}).json()
+    except ValueError:
+        bb.error("Failed to parse project response when getting latest version")
+        return None
+
+    return project_response.get("uuid", None)
+
+
+def clone_project(d, uuid):
+    from dependency_track_requests import put_request
+
+    dt_url = d.getVar("DEPENDENCYTRACK_API_URL") + "/v1/project/clone"
+
+    put_request(bb, dt_url, d.getVar("DEPENDENCYTRACK_API_KEY"),
+                json={"project": uuid, "version": d.getVar("DEPENDENCYTRACK_PROJECT_VERSION"),
+                      "includeACL": True,
+                      "includeAuditHistory": True,
+                      "includeComponents": True,
+                      "includeDependencies": True,
+                      "includePolicyViolations": True,
+                      "includeProperties": True,
+                      "includeServices": True,
+                      "includeTags": True,
+                      "makeCloneLatest": True})
 
 
 def upload_sbom(d):
@@ -274,7 +343,7 @@ def upload_sbom(d):
     else:
         files["project"] = dt_project
 
-    post_request(bb, dt_url, d.getVar("DEPENDENCYTRACK_API_KEY"), files)
+    post_request(bb, dt_url, d.getVar("DEPENDENCYTRACK_API_KEY"), files=files)
 
 
 def upload_vex(d):
@@ -296,4 +365,4 @@ def upload_vex(d):
     else:
         files["project"] = dt_project
 
-    post_request(bb, dt_url, d.getVar("DEPENDENCYTRACK_API_KEY"), files)
+    post_request(bb, dt_url, d.getVar("DEPENDENCYTRACK_API_KEY"), files=files)

@@ -1,45 +1,55 @@
 import requests
+import enum
 
 
-def post_request(bb, url: str, api_key: str, files: dict) -> None:
+class Method(enum.Enum):
+    GET = "GET"
+    POST = "POST"
+    PUT = "PUT"
+
+
+def make_request(bb, url: str, method: Method, api_key: str, files: dict, json: dict,
+                 params: dict) -> requests.Response:
     headers = {"X-API-Key": api_key}
-    log_error_string = f"Failed to post to Dependency Track server at {url}, {files.keys() = }. "
+    log_error_string = f"Failed to {method} on Dependency Track server at {url}. {files.keys() = }, {json = }, {params = }. "
+
+    method_dict = {
+        Method.GET: requests.get,
+        Method.POST: requests.post,
+        Method.PUT: requests.put,
+    }
 
     try:
-        response = requests.post(url, headers=headers, files=files)
+        response = method_dict[method](url, headers=headers, files=files, json=json, params=params)
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
-        bb.error(log_error_string + f"[HTTP Error] {e}")
-        bb.error(f"Response: {response.status_code} -> {response.reason}")
+        # for GET request 404 might be expected, so not an error
+        log_function = lambda x: bb.debug(2, x) if method == Method.GET else bb.error
+
+        log_function(log_error_string + f"[HTTP Error] {e}")
+        log_function(f"Response: {e.response.status_code} -> {e.response.reason}")
         try:
-            bb.error(f"Response: {response.json()}")
-        except ValueError:
-            pass
-    except requests.exceptions.RequestException as e:
-        bb.error(log_error_string + f"[Error] {e}")
-    else:
-        bb.debug(2, f"File successfully uploaded to {url}. Response: {response.json()}")
-
-
-def get_request(bb, url: str, api_key: str, files: dict = None, params: dict = None) -> dict | int | None:
-    headers = {"X-API-Key": api_key}
-    log_error_string = f"Failed to get from Dependency Track server at {url}, {files.keys() = }, {params = }. "
-
-    try:
-        response = requests.get(url, headers=headers, files=files, params=params)
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        # for some get requests a 404 is expected, so it is not the error
-        bb.debug(log_error_string + f"[HTTP Error] {e}")
-        bb.debug(f"Response: {response.status_code} -> {response.reason}")
-        try:
-            bb.debug(f"Response: {response.json()}")
+            log_function(f"Response: {e.response.json()}")
         except ValueError:
             pass
 
-        return e.response.status_code
+        return e.response
     except requests.exceptions.RequestException as e:
         bb.error(log_error_string + f"[Error] {e}")
-        return None
+        return e.response
     else:
-        return response.json()
+        bb.debug(2, f"Successful {method} to {url}. Response: {response.json()}")
+
+    return response
+
+
+def post_request(bb, url: str, api_key: str, files: dict) -> requests.Response:
+    return make_request(bb, url, Method.POST, api_key, files=files, json={}, params={})
+
+
+def put_request(bb, url: str, api_key: str, json: dict) -> requests.Response:
+    return make_request(bb, url, Method.PUT, api_key, files={}, json=json, params={})
+
+
+def get_request(bb, url: str, api_key: str, params: dict = None) -> requests.Response:
+    return make_request(bb, url, Method.GET, api_key, files={}, json={}, params=params)
