@@ -130,11 +130,12 @@ def upload_sbom(d, bb) -> None:
     dt_auto_create = d.getVar("DEPENDENCYTRACK_AUTO_CREATE")
     dt_project_name = d.getVar("DEPENDENCYTRACK_PROJECT_NAME")
     dt_project_version = d.getVar("DEPENDENCYTRACK_PROJECT_VERSION")
-    files = {
-        "parentUUID": dt_parent,
-        "autoCreate": dt_auto_create,
-        "bom": open(d.getVar("DEPENDENCYTRACK_SBOM"), 'rb')
-    }
+    with open(d.getVar("DEPENDENCYTRACK_SBOM"), 'rb') as sbom_file:
+        files = {
+            "parentUUID": dt_parent,
+            "autoCreate": dt_auto_create,
+            "bom": sbom_file.read()
+        }
 
     if dt_project == "":
         files["projectName"] = dt_project_name
@@ -154,7 +155,8 @@ def upload_vex(d, bb) -> None:
     dt_project = d.getVar("DEPENDENCYTRACK_PROJECT")
     dt_project_name = d.getVar("DEPENDENCYTRACK_PROJECT_NAME")
     dt_project_version = d.getVar("DEPENDENCYTRACK_PROJECT_VERSION")
-    files = {"vex": open(d.getVar("DEPENDENCYTRACK_VEX"), "rb")}
+    with open(d.getVar("DEPENDENCYTRACK_VEX"), "rb") as vex_file:
+        files = {"vex": vex_file.read()}
 
     if dt_project == "":
         files["projectName"] = dt_project_name

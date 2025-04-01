@@ -31,8 +31,7 @@ def get_cpe_ids(cve_product: str, version: str, part: str) -> list:
 
 
 def get_references(src_uris: list) -> list:
-    pattern = re.compile(
-        r"https?://[a-z.]*/[a-z.\-/_]*[a-z.\-_].(tar.([gxl]?z|bz2)|tgz)")
+    pattern = re.compile(r"https?://[a-z.]*/[a-z.\-/_]*[a-z.\-_].(tar.([gxl]?z|bz2)|tgz)")
     refs = []
     for src in src_uris:
         if src.startswith("git://") or src.endswith(".git"):
@@ -55,12 +54,12 @@ def get_licenses(d):
     if license_expression:
         license_json = []
         licenses = license_expression.replace("|", "").replace("&", "").split()
-        for license in licenses:
-            converted_license = license_conversion_map.get(license, license)
+        for original_license in licenses:
+            converted_license = license_conversion_map.get(original_license, original_license)
             # Search for the license in COMMON_LICENSE_DIR and LICENSE_PATH
             for directory in [d.getVar("COMMON_LICENSE_DIR")] + (d.getVar("LICENSE_PATH") or "").split():
                 try:
-                    with (pathlib.Path(directory) / converted_license).open(errors="replace") as f:
+                    with (pathlib.Path(directory) / converted_license).open(errors="replace"):
                         license_data = {"license": {"name": converted_license}}
                         license_json.append(license_data)
                         break
