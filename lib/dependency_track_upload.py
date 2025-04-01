@@ -16,7 +16,7 @@ def clone_project_and_wait(d, bb) -> None:
 
     response = clone_project(d, bb, latest_uuid)
     if not response:
-        # error was logged in clone_project
+        # error was logged in clone_project or no upload needed
         return
 
     try:
@@ -26,6 +26,7 @@ def clone_project_and_wait(d, bb) -> None:
         return
     else:
         while not task_finished(d, bb, clone_task_id):
+            bb.debug(2, "Waiting for project clone to finish...")
             time.sleep(10)
 
 
