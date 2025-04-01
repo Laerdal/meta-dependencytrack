@@ -2,15 +2,15 @@ import requests
 import enum
 
 
-def post_request(bb, url: str, api_key: str, files: dict) -> requests.Response:
+def post_request(bb, url: str, api_key: str, files: dict) -> requests.Response | None:
     return _make_request(bb, url, Method.POST, api_key, files=files, json={}, params={})
 
 
-def put_request(bb, url: str, api_key: str, json: dict) -> requests.Response:
+def put_request(bb, url: str, api_key: str, json: dict) -> requests.Response | None:
     return _make_request(bb, url, Method.PUT, api_key, files={}, json=json, params={})
 
 
-def get_request(bb, url: str, api_key: str, params: dict = None) -> requests.Response:
+def get_request(bb, url: str, api_key: str, params: dict = None) -> requests.Response | None:
     return _make_request(bb, url, Method.GET, api_key, files={}, json={}, params=params)
 
 
@@ -21,7 +21,7 @@ class Method(enum.Enum):
 
 
 def _make_request(bb, url: str, method: Method, api_key: str, files: dict, json: dict,
-                  params: dict) -> requests.Response:
+                  params: dict) -> requests.Response | None:
     headers = {"X-API-Key": api_key}
     log_error_string = f"Failed to {method} on Dependency Track server at {url}. {files.keys() = }, {json = }, {params = }. "
 
