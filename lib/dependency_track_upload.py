@@ -5,6 +5,10 @@ from urllib.parse import quote
 
 
 def clone_project_and_wait(d, bb) -> None:
+    dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
+    if not dt_upload:
+        return
+    
     if project_exists(d, bb):
         # no error, nothing to do
         return

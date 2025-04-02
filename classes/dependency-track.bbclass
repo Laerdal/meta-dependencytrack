@@ -191,6 +191,10 @@ python do_dependencytrack_upload() {
     install_packages_file = d.getVar("DEPENDENCYTRACK_TMP") + "/installed_packages.json"
 
     if not os.path.isfile(install_packages_file):
+        dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
+        if not dt_upload:
+            return
+        
         bb.warn("No file: %s, build interrupted?" % install_packages_file)
         return
 
