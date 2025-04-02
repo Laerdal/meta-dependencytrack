@@ -183,7 +183,7 @@ do_rootfs[recrdeptask] += "do_dependencytrack_collect"
 python do_dependencytrack_upload() {
     from sbom_details import get_bom_ref
     from json_utils import read_sbom, read_vex, read_json, write_sbom, write_vex
-    from dependency_track_upload import clone_project_and_wait, upload_sbom, upload_vex
+    from dependency_track_upload import upload_enabled, clone_project_and_wait, upload_sbom, upload_vex
 
     sbom = read_sbom(d)
     vex = read_vex(d)
@@ -191,8 +191,7 @@ python do_dependencytrack_upload() {
     install_packages_file = d.getVar("DEPENDENCYTRACK_TMP") + "/installed_packages.json"
 
     if not os.path.isfile(install_packages_file):
-        dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
-        if not dt_upload:
+        if not upload_enabled(d, bb):
             return
         
         bb.warn("No file: %s, build interrupted?" % install_packages_file)

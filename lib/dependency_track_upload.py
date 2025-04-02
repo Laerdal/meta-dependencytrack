@@ -3,10 +3,11 @@ import time
 from dependency_track_requests import post_request, put_request, get_request
 from urllib.parse import quote
 
+def upload_enabled(d, bb) -> bool:
+    return bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
 
 def clone_project_and_wait(d, bb) -> None:
-    dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
-    if not dt_upload:
+    if not upload_enabled(d, bb):
         return
     
     if project_exists(d, bb):
@@ -86,9 +87,8 @@ def get_projects_latest_version(d, bb) -> str | None:
 
 
 def clone_project(d, bb, uuid: str) -> requests.Response | None:
-    dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
-    if not dt_upload:
-        return None
+    if not upload_enabled(d, bb):
+        return
 
     dt_url = d.getVar("DEPENDENCYTRACK_API_URL") + "/v1/project/clone"
 
@@ -124,8 +124,7 @@ def task_finished(d, bb, task_id: str) -> bool:
 
 
 def upload_sbom(d, bb) -> None:
-    dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
-    if not dt_upload:
+    if not upload_enabled(d, bb):
         return
 
     dt_url = d.getVar("DEPENDENCYTRACK_API_URL") + "/v1/bom"
