@@ -4,6 +4,10 @@ from dependency_track_requests import post_request, put_request, get_request
 from urllib.parse import quote
 
 
+def upload_enabled(d, bb) -> bool:
+    return bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
+
+
 def clone_project_and_wait(d, bb) -> None:
     if project_exists(d, bb):
         # no error, nothing to do
@@ -31,6 +35,9 @@ def clone_project_and_wait(d, bb) -> None:
 
 
 def project_exists(d, bb) -> bool:
+    if not upload_enabled(d, bb):
+        return False
+    
     if d.getVar("DEPENDENCYTRACK_PROJECT") != "":
         # if project's UUID is set then the project exists
         return True
@@ -59,6 +66,9 @@ def project_exists(d, bb) -> bool:
 
 
 def get_projects_latest_version(d, bb) -> str | None:
+    if not upload_enabled(d, bb):
+        return None
+        
     if d.getVar("DEPENDENCYTRACK_PROJECT") != "":
         # if project's UUID is set, version is irrelevant
         return None
@@ -82,8 +92,7 @@ def get_projects_latest_version(d, bb) -> str | None:
 
 
 def clone_project(d, bb, uuid: str) -> requests.Response | None:
-    dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
-    if not dt_upload:
+    if not upload_enabled(d, bb):
         return None
 
     dt_url = d.getVar("DEPENDENCYTRACK_API_URL") + "/v1/project/clone"
@@ -120,8 +129,7 @@ def task_finished(d, bb, task_id: str) -> bool:
 
 
 def upload_sbom(d, bb) -> None:
-    dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
-    if not dt_upload:
+    if not upload_enabled(d, bb):
         return
 
     dt_url = d.getVar("DEPENDENCYTRACK_API_URL") + "/v1/bom"
@@ -147,8 +155,7 @@ def upload_sbom(d, bb) -> None:
 
 
 def upload_vex(d, bb) -> None:
-    dt_upload = bb.utils.to_boolean(d.getVar("DEPENDENCYTRACK_UPLOAD"))
-    if not dt_upload:
+    if not upload_enabled(d, bb):
         return
 
     dt_url = d.getVar("DEPENDENCYTRACK_API_URL") + "/v1/vex"
