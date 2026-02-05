@@ -23,7 +23,7 @@ To enable and configure the layer simply inherit the `dependency-track` class in
 
 * `DEPENDENCYTRACK_PROJECT` - The ID of the project in Dependency-Track
 * `DEPENDENCYTRACK_API_URL` - The URL of the Dependency-Track API server. (*Note:* this is usually different from the URL of the web server you use in your browser)
-* `DEPENDENCYTRACK_API_KEY` - An authentication key for the server. You can find these in the `Teams` section of the `Adminitration` page in Dependency-Track.
+* `DEPENDENCYTRACK_API_KEY` - An authentication key for the server. You can find these in the `Teams` section of the `Administration` page in Dependency-Track.
 
 ### Example
 
