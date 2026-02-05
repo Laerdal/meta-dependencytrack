@@ -7,8 +7,6 @@ CVE_PRODUCT ??= "${BPN}"
 CVE_VERSION ??= "${PV}"
 CVE_PART ??= "a"
 
-CVE_CHECK_IGNORE ??= ""
-
 DEPENDENCYTRACK_DIR ??= "${DEPLOY_DIR}/dependency-track/${MACHINE}"
 DEPENDENCYTRACK_SBOM ??= "${DEPENDENCYTRACK_DIR}/sbom.json"
 DEPENDENCYTRACK_VEX ??= "${DEPENDENCYTRACK_DIR}/vex.json"
@@ -177,8 +175,11 @@ python do_dependencytrack_collect() {
     vex = read_vex(d)
     for patched_cve_id in get_patched_cves(d):
         add_patched_vulnerability(vex, patched_cve_id)
-    for ignored_cve_id in d.getVar("CVE_CHECK_IGNORE").split():
-        add_ignored_vulnerability(vex, ignored_cve_id)
+    for cve in (d.getVarFlags("CVE_STATUS") or {}):
+        from oe.cve_check import decode_cve_status
+        decoded_status, _, _ = decode_cve_status(d, cve)
+        if decoded_status == "Ignored":
+            add_ignored_vulnerability(vex, cve)
     write_vex(d, vex)
 }
 
