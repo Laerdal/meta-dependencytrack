@@ -77,6 +77,13 @@ addhandler do_dependencytrack_init
 do_dependencytrack_init[eventmask] = "bb.event.BuildStarted"
 
 python do_dependencytrack_collect() {
+    # Skip native/nativesdk/crosssdk recipes - they clear MACHINEOVERRIDES
+    # which causes override-dependent variables (e.g. IMAGE_PLATFORM) to
+    # resolve incorrectly, leading to SBOM path mismatches.
+    classoverride = d.getVar('CLASSOVERRIDE') or ''
+    if classoverride in ('class-native', 'class-nativesdk', 'class-crosssdk'):
+        return
+
     from oe.cve_check import get_patched_cves
     from json_utils import read_json, write_json, read_sbom, read_vex, write_sbom, write_vex
     from sbom_details import get_cpe_ids, get_bom_ref, get_references, get_licenses
