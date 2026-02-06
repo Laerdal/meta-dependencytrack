@@ -193,21 +193,25 @@ python do_dependencytrack_upload() {
     from json_utils import read_sbom, read_vex, read_json, write_sbom, write_vex
     from dependency_track_upload import upload_enabled, clone_project_and_wait, upload_sbom, upload_vex
 
+    sbom_path = d.getVar("DEPENDENCYTRACK_SBOM")
+    if not os.path.isfile(sbom_path):
+        if upload_enabled(d, bb):
+            bb.warn("dependency-track: SBOM file not found: %s" % sbom_path)
+        return
+
     sbom = read_sbom(d)
     vex = read_vex(d)
+    bb.plain("dependency-track: SBOM has %d components" % len(sbom.get("components", [])))
 
     install_packages_file = d.getVar("DEPENDENCYTRACK_TMP") + "/installed_packages.json"
-
     if not os.path.isfile(install_packages_file):
-        if not upload_enabled(d, bb):
-            return
-        
-        bb.warn("No file: %s, build interrupted?" % install_packages_file)
+        if upload_enabled(d, bb):
+            bb.warn("dependency-track: installed_packages not found: %s" % install_packages_file)
         return
 
     installed_pkgs = read_json(install_packages_file)
-
     temp_dependencies_json = read_json(d.getVar("DEPENDENCYTRACK_TMP") + "/dependencies.json")
+    bb.plain("dependency-track: processing %d installed packages, %d dependency entries" % (len(installed_pkgs), len(temp_dependencies_json)))
     for package, dependencies in temp_dependencies_json.items():
         if not installed_pkgs.get(package, None):
             installed_pkgs[package] = {"deps": dependencies}

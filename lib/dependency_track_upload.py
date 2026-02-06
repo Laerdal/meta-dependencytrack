@@ -138,6 +138,9 @@ def upload_sbom(d, bb) -> None:
     dt_auto_create = d.getVar("DEPENDENCYTRACK_AUTO_CREATE")
     dt_project_name = d.getVar("DEPENDENCYTRACK_PROJECT_NAME")
     dt_project_version = d.getVar("DEPENDENCYTRACK_PROJECT_VERSION")
+
+    bb.plain("dependency-track: uploading SBOM to %s (project=%s, version=%s)" % (dt_url, dt_project_name, dt_project_version))
+
     with open(d.getVar("DEPENDENCYTRACK_SBOM"), 'rb') as sbom_file:
         files = {
             "parentUUID": dt_parent,
@@ -151,7 +154,11 @@ def upload_sbom(d, bb) -> None:
     else:
         files["project"] = dt_project
 
-    post_request(bb, dt_url, d.getVar("DEPENDENCYTRACK_API_KEY"), files=files)
+    response = post_request(bb, dt_url, d.getVar("DEPENDENCYTRACK_API_KEY"), files=files)
+    if response and response.status_code == 200:
+        bb.plain("dependency-track: SBOM upload successful")
+    else:
+        bb.warn("dependency-track: SBOM upload failed: %s" % response)
 
 
 def upload_vex(d, bb) -> None:
