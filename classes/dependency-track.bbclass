@@ -177,7 +177,11 @@ python do_dependencytrack_collect() {
         add_patched_vulnerability(vex, patched_cve_id)
     for cve in (d.getVarFlags("CVE_STATUS") or {}):
         from oe.cve_check import decode_cve_status
-        decoded_status, _, _ = decode_cve_status(d, cve)
+        decoded = decode_cve_status(d, cve)
+        if isinstance(decoded, dict):
+            decoded_status = decoded.get("mapping", "")
+        else:
+            decoded_status, _, _ = decoded
         if decoded_status == "Ignored":
             add_ignored_vulnerability(vex, cve)
     write_vex(d, vex)
