@@ -187,7 +187,7 @@ python do_dependencytrack_collect() {
     write_vex(d, vex)
 }
 
-addtask dependencytrack_collect before do_build after do_fetch
+addtask dependencytrack_collect before do_build
 do_dependencytrack_collect[nostamp] = "1"
 do_dependencytrack_collect[lockfiles] += "${DEPENDENCYTRACK_LOCK}"
 do_rootfs[recrdeptask] += "do_dependencytrack_collect"
