@@ -25,7 +25,10 @@ def get_cpe_ids(cve_product: str, version: str, part: str) -> list:
         cpe_id = 'cpe:2.3:{}:{}:{}:{}:*:*:*:*:*:*:*'.format(
             part, vendor, product, version)
         cpe_ids.append(type('', (object,), {
-            "cpe": cpe_id, "product": product, "vendor": vendor if vendor != "*" else ""})())
+            "cpe": cpe_id,
+            "product": product,
+            "vendor": vendor if vendor != "*" else "",
+            "purl": f"pkg:generic/{vendor + '/' if vendor != "*" else ""}{product}@{version}"})())
 
     return cpe_ids
 

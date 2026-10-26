@@ -112,6 +112,7 @@ python do_dependencytrack_collect() {
                 "group": cpe_info.vendor,
                 "version": version,
                 "cpe": cpe_info.cpe,
+                "purl": cpe_info.purl
             }
 
             license_json = get_licenses(d)
