@@ -1,15 +1,22 @@
-def get_cve_from_filename(patch_file: str) -> str:
+import re
+
+
+def _get_cve_from_filename(patch_file: str) -> str:
     """
     Get the last CVE ID from a patch file name, if present.
     """
-    import re
-
+    # Matches the last "CVE-YYYY-ID" in the file name, also if written
+    # in lowercase. Possible to have multiple CVE IDs in a single
+    # file name, but only the last one will be detected from the file name.
+    # However, patch files contents addressing multiple CVE IDs are supported
+    # (cve_match regular expression)
     cve_file_name_match = re.compile(r".*(CVE-\d{4}-\d+)", re.IGNORECASE)
 
     fname_match = cve_file_name_match.search(patch_file)
     return fname_match.group(1).upper() if fname_match else None
 
-def get_patch_text(patch_file: str) -> str | None:
+
+def _get_patch_text(patch_file: str) -> str | None:
     """
     Get the text content of a patch file, trying UTF-8 first and falling back to ISO-8859-1 if necessary.
     """
@@ -28,22 +35,16 @@ def get_patch_text(patch_file: str) -> str | None:
             with open(patch_file, "r", encoding="iso8859-1") as f:
                 return f.read()
 
+
 def get_patch_evidence(d):
     """
     based on os.cve_check.get_patched_cves(d) but returns a dict of CVE IDs and the commit hash if available
     Get patches that solve CVEs using the "CVE: " tag.
     """
 
-    import re
     import oe.patch
 
     cve_match = re.compile(r"CVE:( CVE-\d{4}-\d+)+")
-
-    # Matches the last "CVE-YYYY-ID" in the file name, also if written
-    # in lowercase. Possible to have multiple CVE IDs in a single
-    # file name, but only the last one will be detected from the file name.
-    # However, patch files contents addressing multiple CVE IDs are supported
-    # (cve_match regular expression)
     patch_from_commit_match = re.compile(r"\bFrom\s+([0-9a-fA-F]{40})\b")
 
     patched_cves = {}
@@ -53,13 +54,13 @@ def get_patch_evidence(d):
         patch_file = bb.fetch.decodeurl(url)[2]
 
         # Check patch file name for CVE ID
-        cve = get_cve_from_filename(patch_file)
+        cve = _get_cve_from_filename(patch_file)
         if cve:
             if cve not in patched_cves:
                 patched_cves[cve] = None
             bb.debug(2, "Found %s from patch file name %s" % (cve, patch_file))
 
-        patch_text = get_patch_text(patch_file)
+        patch_text = _get_patch_text(patch_file)
         if patch_text is None:
             continue
 
@@ -71,7 +72,7 @@ def get_patch_evidence(d):
 
         for match in cve_match.finditer(patch_text):
             # Get only the CVEs without the "CVE: " tag
-            cves = patch_text[match.start()+5:match.end()]
+            cves = patch_text[match.start() + 5:match.end()]
             for cve in cves.split():
                 bb.debug(2, "Patch %s solves %s" % (patch_file, cve))
                 patched_cves[cve] = patch_hash
@@ -81,6 +82,8 @@ def get_patch_evidence(d):
             bb.debug(2, "Patch %s doesn't solve CVEs" % patch_file)
 
     # Search for additional patched CVEs
+    from oe.cve_check import decode_cve_status
+
     for cve in (d.getVarFlags("CVE_STATUS") or {}):
         decoded = decode_cve_status(d, cve)
         if isinstance(decoded, dict):
