@@ -1,17 +1,19 @@
 import re
 
+cve_match = re.compile(r"CVE:( CVE-\d{4}-\d+)+")
+
+# Matches the last "CVE-YYYY-ID" in the file name, also if written
+# in lowercase. Possible to have multiple CVE IDs in a single
+# file name, but only the last one will be detected from the file name.
+# However, patch files contents addressing multiple CVE IDs are supported
+# (cve_match regular expression)
+cve_file_name_match = re.compile(r".*(CVE-\d{4}-\d+)", re.IGNORECASE)
+
 
 def _get_cve_from_filename(patch_file: str) -> str:
     """
     Get the last CVE ID from a patch file name, if present.
     """
-    # Matches the last "CVE-YYYY-ID" in the file name, also if written
-    # in lowercase. Possible to have multiple CVE IDs in a single
-    # file name, but only the last one will be detected from the file name.
-    # However, patch files contents addressing multiple CVE IDs are supported
-    # (cve_match regular expression)
-    cve_file_name_match = re.compile(r".*(CVE-\d{4}-\d+)", re.IGNORECASE)
-
     fname_match = cve_file_name_match.search(patch_file)
     return fname_match.group(1).upper() if fname_match else None
 
@@ -36,6 +38,20 @@ def _get_patch_text(patch_file: str) -> str | None:
                 return f.read()
 
 
+patch_from_commit_pattern = re.compile(r"\bFrom\s+([0-9a-fA-F]{40})\b")
+# commit subjects can be multiline, so we need to match the first line and any subsequent lines that are indented with whitespace
+patch_subject_pattern = re.compile(r"^Subject:[ \t]*(.*(?:\r?\n[ \t]+.*)*)", re.MULTILINE)
+
+
+def _get_patch_info(patch_text: str) -> tuple[str | None, str | None]:
+    patch_hash_match = patch_from_commit_pattern.search(patch_text)
+    patch_hash = patch_hash_match.group(1) if patch_hash_match else None
+
+    commit_subject_match = patch_subject_pattern.search(patch_text)
+    commit_subject = re.sub(r"\r?\n[ \t]+", " ", commit_subject_match.group(1)).strip() if commit_subject_match else None
+    return patch_hash, commit_subject
+
+
 def get_patch_evidence(d):
     """
     based on os.cve_check.get_patched_cves(d) but returns a dict of CVE IDs and the commit hash if available
@@ -43,9 +59,6 @@ def get_patch_evidence(d):
     """
 
     import oe.patch
-
-    cve_match = re.compile(r"CVE:( CVE-\d{4}-\d+)+")
-    patch_from_commit_match = re.compile(r"\bFrom\s+([0-9a-fA-F]{40})\b")
 
     patched_cves = {}
     patches = oe.patch.src_patches(d)
@@ -67,8 +80,7 @@ def get_patch_evidence(d):
         if patch_text is None:
             continue
 
-        patch_hash = patch_from_commit_match.search(patch_text)
-        patch_hash = patch_hash.group(1) if patch_hash else None
+        patch_hash, patch_subject = _get_patch_info(patch_text)
 
         # Search for one or more "CVE: " lines
 
@@ -77,7 +89,9 @@ def get_patch_evidence(d):
             cves = patch_text[match.start() + 5:match.end()]
             for cve in cves.split():
                 bb.debug(2, "Patch %s solves %s" % (patch_file, cve))
-                patched_cves[cve] = patch_hash
+                if cve not in patched_cves or patch_hash:
+                    patched_cves[cve] = (f"commit hash: {patch_hash}" if patch_hash else None) + (
+                        f" ({patch_subject})" if patch_subject else "")
                 cve_found = True
 
         if not cve_found:
