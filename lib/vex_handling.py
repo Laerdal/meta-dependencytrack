@@ -88,11 +88,14 @@ def get_patch_evidence(d):
             # Get only the CVEs without the "CVE: " tag
             cves = patch_text[match.start() + 5:match.end()]
             for cve in cves.split():
-                bb.debug(2, "Patch %s solves %s" % (patch_file, cve))
-                if cve not in patched_cves or patch_hash:
-                    patched_cves[cve] = (f"commit hash: {patch_hash}" if patch_hash else None) + (
-                        f" ({patch_subject})" if patch_subject else "")
                 cve_found = True
+                bb.debug(2, "Patch %s solves %s" % (patch_file, cve))
+                fix_evidence = (f"commit hash: {patch_hash}" if patch_hash else "") + (f" ({patch_subject})" if patch_subject else "")
+
+                if patched_cves.get(cve, None) is None:
+                    patched_cves[cve] = fix_evidence
+                else:  # there is some info already, append the new info if available
+                    patched_cves[cve] += f"; {fix_evidence}" if fix_evidence else ""
 
         if not cve_found:
             bb.debug(2, "Patch %s doesn't solve CVEs" % patch_file)
