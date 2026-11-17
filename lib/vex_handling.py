@@ -53,12 +53,15 @@ def get_patch_evidence(d):
     for url in patches:
         patch_file = bb.fetch.decodeurl(url)[2]
 
+        cve_found = False
+
         # Check patch file name for CVE ID
         cve = _get_cve_from_filename(patch_file)
         if cve:
             if cve not in patched_cves:
                 patched_cves[cve] = None
             bb.debug(2, "Found %s from patch file name %s" % (cve, patch_file))
+            cve_found = True
 
         patch_text = _get_patch_text(patch_file)
         if patch_text is None:
@@ -68,7 +71,6 @@ def get_patch_evidence(d):
         patch_hash = patch_hash.group(1) if patch_hash else None
 
         # Search for one or more "CVE: " lines
-        text_match = False
 
         for match in cve_match.finditer(patch_text):
             # Get only the CVEs without the "CVE: " tag
@@ -76,9 +78,9 @@ def get_patch_evidence(d):
             for cve in cves.split():
                 bb.debug(2, "Patch %s solves %s" % (patch_file, cve))
                 patched_cves[cve] = patch_hash
-                text_match = True
+                cve_found = True
 
-        if not fname_match and not text_match:
+        if not cve_found:
             bb.debug(2, "Patch %s doesn't solve CVEs" % patch_file)
 
     # Search for additional patched CVEs
