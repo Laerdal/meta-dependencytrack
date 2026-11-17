@@ -83,8 +83,9 @@ python do_dependencytrack_collect() {
         return
 
     from json_utils import read_json, write_json, read_sbom, read_vex, write_sbom, write_vex
+    from patches_parsing import get_patch_evidence
     from sbom_details import get_cpe_ids, get_bom_ref, get_references, get_licenses
-    from vex_handling import get_patch_evidence, add_ignored_vulnerability, add_patched_vulnerability
+    from vex_handling import add_ignored_vulnerability, add_patched_vulnerability
 
     # load the bom
     name = d.getVar("CVE_PRODUCT")
