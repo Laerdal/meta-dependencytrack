@@ -82,8 +82,8 @@ python do_dependencytrack_collect() {
     if classoverride in ('class-native', 'class-nativesdk', 'class-crosssdk'):
         return
 
-    from oe.cve_check import get_patched_cves
     from json_utils import read_json, write_json, read_sbom, read_vex, write_sbom, write_vex
+    from patches_parsing import get_patch_evidence
     from sbom_details import get_cpe_ids, get_bom_ref, get_references, get_licenses
     from vex_handling import add_ignored_vulnerability, add_patched_vulnerability
 
@@ -173,17 +173,19 @@ python do_dependencytrack_collect() {
 
     # Collecting patched and ignored CVEs
     vex = read_vex(d)
-    for patched_cve_id in get_patched_cves(d):
-        add_patched_vulnerability(vex, patched_cve_id)
+    for patched_cve_id, description in get_patch_evidence(d).items():
+        add_patched_vulnerability(vex, patched_cve_id, description)
+
     for cve in (d.getVarFlags("CVE_STATUS") or {}):
         from oe.cve_check import decode_cve_status
         decoded = decode_cve_status(d, cve)
         if isinstance(decoded, dict):
             decoded_status = decoded.get("mapping", "")
+            description = decoded.get("description", "")
         else:
-            decoded_status, _, _ = decoded
+            decoded_status, _, description = decoded
         if decoded_status == "Ignored":
-            add_ignored_vulnerability(vex, cve)
+            add_ignored_vulnerability(vex, cve, description)
     write_vex(d, vex)
 }
 

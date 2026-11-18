@@ -1,18 +1,18 @@
-def add_ignored_vulnerability(vex: dict, cve_id: str) -> None:
+def add_ignored_vulnerability(vex: dict, cve_id: str, description: str) -> None:
     if next((v for v in vex["vulnerabilities"] if v["id"] == cve_id), None) is None:
         add_vulnerability(vex, cve_id, "resolved", "will_not_fix",
-                          "CVE_CHECK data: The vulnerability has been Ignored!", "code_not_present")
+                          f"CVE_CHECK data: The vulnerability has been Ignored! {description}", "code_not_present")
 
 
-def add_patched_vulnerability(vex: dict, cve_id: str) -> None:
+def add_patched_vulnerability(vex: dict, cve_id: str, description: str) -> None:
     vulnerability = next(
         (v for v in vex["vulnerabilities"] if v["id"] == cve_id), None)
     if vulnerability is None:
         add_vulnerability(vex, cve_id, "resolved", "update",
-                          "CVE_CHECK data : The vulnerability has been Patched!")
+                          f"CVE_CHECK data : The vulnerability has been Patched! {description}")
     else:  # (write to patched, even if already ignored)
         vulnerability["analysis"].update({"state": "resolved", "response": [
-            "update"], "detail": "CVE_CHECK data: The vulnerability has been Patched!"})
+            "update"], "detail": f"CVE_CHECK data: The vulnerability has been Patched! {description}"})
 
 
 def add_vulnerability(vex: dict, cve_id: str, analysis_state: str, analysis_response: str, analysis_detail: str,
