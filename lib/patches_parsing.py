@@ -60,6 +60,8 @@ def get_patch_evidence(d):
 
     import oe.patch
 
+    prefix_size = len("CVE: ")
+
     patched_cves = {}
     patches = oe.patch.src_patches(d)
     bb.debug(2, "Scanning %d patches for CVEs" % len(patches))
@@ -86,7 +88,7 @@ def get_patch_evidence(d):
 
         for match in cve_match.finditer(patch_text):
             # Get only the CVEs without the "CVE: " tag
-            cves = patch_text[match.start() + 5:match.end()]
+            cves = patch_text[match.start() + prefix_size:match.end()]
             for cve in cves.split():
                 cve_found = True
                 bb.debug(2, "Patch %s solves %s" % (patch_file, cve))
